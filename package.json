@@ -1,6 +1,6 @@
 {
   "name": "pi-pokepet",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A cute, colorful Pokémon companion for the pi coding agent. Pick a Pokémon that lives below your editor and reacts to tools, tests, commits, PRs, reviews, subagents, model swaps and more — pure ASCII, works in any terminal. Unofficial fan project.",
   "keywords": [
     "pi-package",

@@ -9,6 +9,8 @@ spinning up subagents, switching models, compacting, and more.
 Pure ASCII + 256-color ANSI, so it looks great in **Terminal.app, Warp**, and every
 other terminal — **no image/graphics protocol required**.
 
+![pi-pokepet](https://raw.githubusercontent.com/djdiptayan1/pi-pokepet/main/demo.png)
+
 ```
  /\_/\     Pikachu ⚡  ALL GREEN! ✦
 (^o^)      ♥▓▓▓░ 78
@@ -33,14 +35,63 @@ Try it for a single run without installing:
 pi -e npm:pi-pokepet
 ```
 
-## Choose your Pokémon
+## The roster
 
+Pick one with `/pokemon choose <name>`. Each one **renders in its own type color**
+in your terminal — the colored square shows which:
+
+#### Pikachu &nbsp;·&nbsp; ⚡ Electric &nbsp;·&nbsp; 🟨 yellow
 ```
-/pokemon choose pikachu
+ /\_/\
+(o.o)
+ >⚡<
 ```
 
-Roster: **pikachu** ⚡ · **charmander** 🔥 · **squirtle** 💧 · **bulbasaur** 🍃 ·
-**eevee** ✦ · **jigglypuff** ♪ · **psyduck** ?
+#### Charmander &nbsp;·&nbsp; 🔥 Fire &nbsp;·&nbsp; 🟧 orange
+```
+  ,--,
+<o.o>
+ ~(🔥)
+```
+
+#### Squirtle &nbsp;·&nbsp; 💧 Water &nbsp;·&nbsp; 🟦 blue
+```
+  _=_
+(o.o)
+ <(_)>
+```
+
+#### Bulbasaur &nbsp;·&nbsp; 🍃 Grass &nbsp;·&nbsp; 🟩 green
+```
+  (~)
+(o.o)
+ /---\
+```
+
+#### Eevee &nbsp;·&nbsp; ✦ Normal &nbsp;·&nbsp; 🟫 tan
+```
+ /v__v\
+(o.o)
+ >  <~
+```
+
+#### Jigglypuff &nbsp;·&nbsp; ♪ Fairy &nbsp;·&nbsp; 🩷 pink
+```
+  .--.
+(o.o)
+  '--'
+```
+
+#### Psyduck &nbsp;·&nbsp; ? Water &nbsp;·&nbsp; 🟨 pale yellow
+```
+  \_/
+(o.o)
+  J L
+```
+
+> The eyes and tails animate, and change with mood — `(o.o)` idle, `(^o^)` happy,
+> `(@.@)` working, `(O.O)` panic, `(u.u)` asleep. The colored banner above shows the
+> whole team's type colors at a glance.
 
 ## Commands
 

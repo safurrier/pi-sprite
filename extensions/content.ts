@@ -113,7 +113,7 @@ export const INTENT_FAIL: Record<Intent, string[]> = {
 
 /** Categorize an edited file path for a flavored reaction. */
 export function fileCategory(path: string): keyof typeof FILE_REACT {
-	const p = path.toLowerCase();
+	const p = path.toLowerCase().replace(/\\/g, "/");
 	if (/\.(test|spec)\.[a-z]+$|_test\.[a-z]+$|\/tests?\//.test(p)) return "test";
 	if (/\.(md|mdx|txt|rst|adoc)$/.test(p)) return "docs";
 	if (/\.(css|scss|sass|less|styl)$/.test(p)) return "styles";

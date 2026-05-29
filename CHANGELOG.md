@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0 — final release
+
+- README: full roster gallery showing every Pokémon's ASCII art with its type
+  color, plus a colored banner image.
+- Cross-platform: normalize Windows path separators in file-type detection so
+  directory-based reactions (e.g. `tests/`) work on Windows as well as
+  macOS/Linux. Uses only Node builtins — runs on macOS, Linux, and Windows.
+
 ## 0.1.0 — initial release
 
 - 7 Pokémon companions: Pikachu, Charmander, Squirtle, Bulbasaur, Eevee,
