@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.0
+
+- Added automated package version bump validation check.
+- Added automated CHANGELOG.md modification verification check.
+
 ## 1.2.0 — keep-awake
 
 - **Keep your system awake:** `/pokemon awake [reason]` stops the machine from

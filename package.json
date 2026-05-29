@@ -1,6 +1,6 @@
 {
 	"name": "pi-pokepet",
-	"version": "1.2.2",
+	"version": "1.3.0",
 	"description": "A cute, colorful Pokémon companion for the pi coding agent. Pick a Pokémon that lives below your editor and reacts to tools, tests, commits, PRs, reviews, subagents, model swaps and more — pure ASCII, works in any terminal. Unofficial fan project.",
 	"keywords": [
 		"pi-package",
@@ -34,7 +34,8 @@
 	},
 	"scripts": {
 		"lint": "biome check .",
-		"lint:fix": "biome check --write ."
+		"lint:fix": "biome check --write .",
+		"check-version": "node scripts/check-version-bump.js"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.16"
