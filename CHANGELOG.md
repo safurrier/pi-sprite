@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1
+
+- Switch to secure, passwordless NPM OIDC Trusted Publishing to bypass 2FA safely.
+- Enhanced release checks script to automatically bypass on pure CI/CD or chore Pull Requests.
+
 ## 1.3.0
 
 - Added automated package version bump validation check.
