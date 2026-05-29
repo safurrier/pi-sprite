@@ -89,8 +89,8 @@ in your terminal — the colored square shows which:
   J L
 ```
 
-> The eyes and tails animate, and change with mood — `(o.o)` idle, `(^o^)` happy,
-> `(@.@)` working, `(O.O)` panic, `(u.u)` asleep. The colored banner above shows the
+> The eyes and tails animate, and change with mood — `(o.o)` idle, `(•.•)` thinking,
+> `(^o^)` happy, `(@.@)` working, `(O.O)` panic, `(u.u)` asleep. The colored banner above shows the
 > whole team's type colors at a glance.
 
 ## Commands
@@ -107,8 +107,13 @@ in your terminal — the colored square shows which:
 
 ## What it reacts to
 
-**Moods (animated):** appears → talks while the model streams → works during tool
-calls → celebrates on success → panics on errors → sleeps when idle.
+**Moods (animated):** appears → **thinks** while the model reasons (floating with a
+💭 bubble) → talks while it streams a reply → works during tool calls → celebrates on
+success → panics on errors → sleeps when idle. The *body* animates too — working
+bobs, happy dances side to side, panic jitters.
+
+**MCP & subagents:** MCP tool calls (`firecrawl_*`, `linear_*`, the `mcp` gateway…) →
+*"chatting with a tool-spirit..."*; dispatching a subagent → *"go, partner!"*.
 
 **Tools & commands** (detected from tool calls): tests, git (commit / push / pull /
 merge / rebase / stash / checkout), build, lint, install, dev-server, docker,
@@ -130,7 +135,9 @@ network, search, and dangerous commands (`rm -rf`, `sudo`…).
 *"hang in there! *warm hug*"*; recovery → *"redemption arc complete!"*.
 
 **Energy:** a `♥` meter that drifts down over time and is restored with
-`/pokemon feed`.
+`/pokemon feed`. It now **matters** — a starving pet (low `♥`) droops its eyes,
+barely moves, and nods off quickly; a well-fed one (high `♥`) does the full bouncy
+dance.
 
 ## Bond tiers (cross-session memory)
 

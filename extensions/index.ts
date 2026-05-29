@@ -29,10 +29,13 @@ import {
 	INTENT_FAIL,
 	INTENT_OK,
 	INTENT_RUN,
+	MCP_LINES,
 	MESSAGES,
+	SUBAGENT_LINES,
 	TIME_LINES,
 	detectIntent,
 	fileCategory,
+	isMcpTool,
 	timeBucket,
 } from "./content.ts";
 import { greeting, loadSaved, logEvent, readEvents, saveState, state, tierOf } from "./state.ts";
@@ -76,7 +79,10 @@ function render(): void {
 	if (!state.visible) return ctxRef.ui.setWidget("pokepet", undefined);
 
 	const m = mon();
-	const frame = buildFrame(m, state.mood, state.frameIdx);
+	const frame = buildFrame(m, state.mood, state.frameIdx, {
+		lively: state.energy > 60,
+		weak: state.energy < 15,
+	});
 	const bodyColor = MOOD_COLOR[state.mood] ?? m.color;
 	const lines = frame.map((line) => c(bodyColor, line));
 
@@ -93,9 +99,14 @@ function tick(): void {
 	state.frameIdx++;
 	addEnergy(-0.02);
 	const since = Date.now() - state.lastActivity;
-	if ((state.mood === "talking" || state.mood === "working") && since > 1500) return setMood("idle");
+	// Active moods revert to idle once the model/tool goes quiet — but never while a
+	// tool is still running (long bash/test would otherwise make the pet doze off).
+	const busy = state.mood === "talking" || state.mood === "thinking" || state.mood === "working";
+	if (busy && !state.toolActive && since > 1500) return setMood("idle");
 	if ((state.mood === "happy" || state.mood === "panic" || state.mood === "hatch") && since > 3000) return setMood("idle");
-	if (state.mood === "idle" && since > 90_000) return setMood("sleep");
+	// A starving pet tires out and nods off far sooner.
+	const sleepAfter = state.energy < 15 ? 30_000 : 90_000;
+	if (state.mood === "idle" && since > sleepAfter) return setMood("sleep");
 	if (state.mood === "idle" && state.frameIdx % 16 === 0) state.message = pick(idlePool());
 	render();
 }
@@ -140,17 +151,60 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		if (!animTimer) animTimer = setInterval(tick, 450);
 	});
 
-	pi.on("message_update", async () => {
+	// The stream tells us *what* the model is doing: reasoning, writing, or
+	// composing a tool call. Give reasoning its own "thinking" mood.
+	pi.on("message_update", async (event: unknown) => {
+		const type = (event as { assistantMessageEvent?: { type?: string } })?.assistantMessageEvent?.type ?? "";
+
+		if (/^thinking/.test(type)) {
+			if (state.mood !== "thinking") setMood("thinking");
+			else state.lastActivity = Date.now();
+			return;
+		}
+
+		if (/^toolcall/.test(type)) {
+			// Composing a tool call — the upcoming tool_call event sets the real message.
+			if (state.mood !== "working") setMood("working");
+			else state.lastActivity = Date.now();
+			return;
+		}
+
+		// text_* (or unknown) -> chatting with you.
 		if (state.mood !== "talking") setMood("talking");
 		else state.lastActivity = Date.now();
 	});
 
 	pi.on("turn_start", async () => setMood("working"));
 
+	// Keep the pet alive (and animating) for the full duration of a tool run.
+	pi.on("tool_execution_start", async () => {
+		state.toolActive = true;
+		state.lastActivity = Date.now();
+	});
+	pi.on("tool_execution_update", async () => {
+		state.lastActivity = Date.now();
+	});
+	pi.on("tool_execution_end", async () => {
+		state.toolActive = false;
+		state.lastActivity = Date.now();
+	});
+
 	pi.on("tool_call", async (event: unknown) => {
 		const e = event as { toolName?: string; input?: Record<string, unknown> };
 		const tool = e?.toolName ?? "";
 		const input = e?.input ?? {};
+
+		// Subagent / autonomous delegation (the `subagent`/`task` tool).
+		if (/^(subagent|task|dispatch_agent|agent_)/i.test(tool)) {
+			state.lastIntent = undefined;
+			return setMood("happy", { message: pick(SUBAGENT_LINES) });
+		}
+
+		// MCP tool usage (server-prefixed names like firecrawl_*, linear_*, or the mcp gateway).
+		if (isMcpTool(tool)) {
+			state.lastIntent = undefined;
+			return setMood("working", { message: pick(MCP_LINES) });
+		}
 
 		// PR / review tools (gh, Linear diff, etc.)
 		if (/diff|review|pull_request|\bpr_|get_diff/i.test(tool)) {
@@ -218,8 +272,10 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 	});
 
 	// --- pi advanced features ----------------------------------------------
-	pi.on("agent_start", async () => setMood("happy", { message: "go, partner! (subagent on it)" }));
-	pi.on("agent_end", async () => setMood("happy", { message: "teammate's back! ✦" }));
+	// agent_start/agent_end fire once per user prompt (not per subagent) — keep them
+	// low-key; real subagent dispatch is detected via the tool_call above.
+	pi.on("agent_start", async () => setMood("working", { message: pick(MESSAGES.working) }));
+	pi.on("agent_end", async () => setMood("happy", { message: "all wrapped up! ✦" }));
 	pi.on("model_select", async () => setMood("happy", { message: "feeling a new power! (model swap) ✦" }));
 	pi.on("thinking_level_select", async () => setMood("working", { message: "powering up... *thinking harder*" }));
 	pi.on("session_before_fork", async () => setMood("happy", { message: "splitting timelines! (fork)" }));

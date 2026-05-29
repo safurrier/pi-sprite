@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0 — reactive update
+
+- **Real "thinking" mood:** splits the model stream by event type, so reasoning
+  (`thinking_*`) now floats with a 💭 thought bubble — distinct from talking
+  (`text_*`) and tool-call composing (`toolcall_*`).
+- **Lively body animation:** beyond the eyes, the body now moves per mood —
+  working bobs, happy dances side to side, panic jitters, thinking floats.
+- **MCP reactions:** detects MCP tool calls (server-prefixed names like
+  `firecrawl_*`, `linear_*`, and the `mcp` gateway) with their own line.
+- **Accurate subagents:** subagent dispatch is now detected from the
+  `subagent`/`task` tool call (was incorrectly firing on every prompt).
+- **Feeding matters:** low energy droops the eyes, damps motion, and sends the
+  pet to sleep sooner; full energy unlocks the wider, bouncier dance.
+- **No more dozing mid-run:** the pet stays animated for the full duration of a
+  long-running tool (bash/tests) instead of reverting to idle.
+
 ## 1.0.0 — final release
 
 - README: full roster gallery showing every Pokémon's ASCII art with its type

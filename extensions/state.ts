@@ -29,6 +29,8 @@ export interface PokeState {
 	energy: number;
 	failStreak: number;
 	editTimes: number[];
+	/** True while a tool is executing, so the pet doesn't go idle mid-run. */
+	toolActive: boolean;
 }
 
 export const state: PokeState = {
@@ -44,6 +46,7 @@ export const state: PokeState = {
 	energy: 85,
 	failStreak: 0,
 	editTimes: [],
+	toolActive: false,
 };
 
 interface SavedState {

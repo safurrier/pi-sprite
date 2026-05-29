@@ -12,6 +12,7 @@ export const MESSAGES: Record<Mood, string[]> = {
 	hatch: ["ready when you are~"],
 	idle: ["just vibing", "*blinks*", "what shall we build?", "i'm here if you need me", "*stretches*"],
 	talking: ["ooh, go on...", "*listening*", "i love a good plan", "mhm, mhm!", "tell me more~"],
+	thinking: ["hmm... *ponders*", "*deep in thought*", "lemme think...", "🤔 cooking...", "*gears turning*", "reasoning it through~"],
 	working: ["*scribbles notes*", "on it!", "crunching...", "*focus mode*", "tippy-tappy"],
 	happy: ["yaaay! ✦", "we did it!", "*happy dance*", "clean run! ✦", "*sparkles*"],
 	panic: ["uh oh...", "*nervous*", "we'll fix it!", "deep breaths...", "you got this!"],
@@ -145,6 +146,39 @@ export function detectIntent(cmd: string): Intent | undefined {
 	if (/\b(grep|rg|ag|find|fd|ls|cat|less|tail|head)\b/.test(x)) return "search";
 	return undefined;
 }
+
+/** Known MCP server name prefixes (pi exposes MCP tools as `<server>_<tool>`). */
+const MCP_PREFIXES = [
+	"firecrawl", "linear", "context7", "github", "gitlab", "playwright", "puppeteer",
+	"notion", "slack", "obsidian", "sentry", "stripe", "supabase", "figma", "atlassian",
+	"postgres", "sqlite", "filesystem", "memory", "fetch", "brave", "exa",
+];
+
+/** Detect whether a tool call is going through an MCP server / gateway. */
+export function isMcpTool(tool: string): boolean {
+	if (!tool) return false;
+	if (tool === "mcp") return true; // the generic MCP gateway tool
+	if (/(^|[_-])mcp([_-]|$)/i.test(tool)) return true;
+	const lead = tool.toLowerCase().split(/[_-]/)[0] ?? "";
+	return MCP_PREFIXES.includes(lead);
+}
+
+/** Lines for when the pet reaches out through an MCP tool. */
+export const MCP_LINES = [
+	"chatting with a tool-spirit... ✦",
+	"MCP magic incoming~",
+	"*pings an external power*",
+	"reaching beyond the editor~",
+	"summoning a tool spirit",
+];
+
+/** Lines for when a subagent / autonomous helper is dispatched. */
+export const SUBAGENT_LINES = [
+	"go, partner! (subagent on it)",
+	"sending in backup! ✦",
+	"*deploys a teammate*",
+	"divide and conquer!",
+];
 
 /** Bucket the current time for time-aware idle lines. */
 export function timeBucket(): keyof typeof TIME_LINES {
