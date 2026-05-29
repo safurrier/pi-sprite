@@ -101,9 +101,35 @@ in your terminal — the colored square shows which:
 /pokemon choose <name>      pick your Pokémon
 /pokemon nick <nickname>    give it a nickname
 /pokemon feed               give a berry (restores energy)
+/pokemon awake [reason]     keep your system from sleeping (e.g. long build)
+/pokemon sleep              release the lock, allow sleep again (pet naps)
 /pokemon stats              productivity + bond dashboard
 /pokemon hide | show        toggle the widget
 ```
+
+## Keeping your system awake ☕
+
+Got something running in the background and don't want your machine to sleep? Tell
+your Pokémon to stand guard:
+
+```
+/pokemon awake training the model      # start, with a reason
+/pokemon awake status                  # check what's holding the lock
+/pokemon sleep                         # release it (and the pet naps 💤)
+```
+
+While it's on, the pet switches to a vigilant **guard** mood (☕) and refuses to
+sleep. It works on every OS using the native inhibitor — **no dependencies**:
+
+| OS | Mechanism |
+|---|---|
+| macOS | `caffeinate -dimsu` |
+| Linux | `systemd-inhibit` (idle:sleep, block mode) |
+| Windows | `SetThreadExecutionState` via PowerShell |
+
+Every inhibitor is tied to pi's own process, so the lock **auto-releases when pi
+exits or crashes** — your machine is never left awake forever. It's also released on
+`/pokemon sleep` and on session shutdown.
 
 ## What it reacts to
 

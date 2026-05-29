@@ -17,6 +17,7 @@ export const MESSAGES: Record<Mood, string[]> = {
 	happy: ["yaaay! ✦", "we did it!", "*happy dance*", "clean run! ✦", "*sparkles*"],
 	panic: ["uh oh...", "*nervous*", "we'll fix it!", "deep breaths...", "you got this!"],
 	sleep: ["*snoozing* zzz", "wake me when it's go time", "*dreams of berries*"],
+	guard: ["on watch ☕", "keeping your system awake~", "*stands guard*", "no sleep 'til it's done", "i've got the night shift", "powering through for you"],
 };
 
 export const TIME_LINES: Record<string, string[]> = {

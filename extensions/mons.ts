@@ -6,7 +6,7 @@
  * frame builder and animation stay consistent.
  */
 
-export type Mood = "hatch" | "idle" | "talking" | "thinking" | "working" | "happy" | "panic" | "sleep";
+export type Mood = "hatch" | "idle" | "talking" | "thinking" | "working" | "happy" | "panic" | "sleep" | "guard";
 
 /** Per-mood color override (256-color); falls back to the Pokémon's own color. */
 export const MOOD_COLOR: Partial<Record<Mood, number>> = {
@@ -16,6 +16,7 @@ export const MOOD_COLOR: Partial<Record<Mood, number>> = {
 	happy: 84,
 	panic: 203,
 	sleep: 244,
+	guard: 214,
 };
 
 export interface Mon {
@@ -112,6 +113,7 @@ const EYES: Record<Mood, string[]> = {
 	happy: ["^.^", "^o^"],
 	panic: ["O.O", "O_O"],
 	sleep: ["u.u", "-.-"],
+	guard: ["◉.◉", "◔.◔", "o.o"],
 };
 
 /** Droopy, half-closed eyes used when the pet is starving (low energy). */
@@ -183,6 +185,15 @@ export function buildFrame(mon: Mon, mood: Mood, idx: number, opts: FrameOpts = 
 			top = lift(top, shake);
 			mid = lift(mid, shake);
 			bottom = lift(bottom, shake);
+			break;
+		}
+
+		case "guard": {
+			// On watch: alert, barely moving, sipping coffee.
+			const bob = idx % 2;
+			top = lift(top, bob) + (idx % 4 === 0 ? "  ☕" : "");
+			mid = lift(mid, bob);
+			bottom = lift(bottom, bob);
 			break;
 		}
 	}

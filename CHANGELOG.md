@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.2.0 — keep-awake
+
+- **Keep your system awake:** `/pokemon awake [reason]` stops the machine from
+  sleeping while something runs in the background — cross-platform with no
+  dependencies (macOS `caffeinate`, Linux `systemd-inhibit`, Windows
+  `SetThreadExecutionState`). Release with `/pokemon sleep` (and the pet naps).
+- The inhibitor is tied to pi's PID, so the lock auto-releases if pi exits or
+  crashes — the system is never left awake forever.
+- New vigilant **guard** mood (☕) shown while keep-awake is active; the pet
+  refuses to sleep and a persistent `☕ awake` marker appears on the meter.
+
 ## 1.1.0 — reactive update
 
 - **Real "thinking" mood:** splits the model stream by event type, so reasoning

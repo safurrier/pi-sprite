@@ -104,9 +104,15 @@ function tick(): void {
 	const busy = state.mood === "talking" || state.mood === "thinking" || state.mood === "working";
 	if (busy && !state.toolActive && since > 1500) return setMood("idle");
 	if ((state.mood === "happy" || state.mood === "panic" || state.mood === "hatch") && since > 3000) return setMood("idle");
-	// A starving pet tires out and nods off far sooner.
-	const sleepAfter = state.energy < 15 ? 30_000 : 90_000;
-	if (state.mood === "idle" && since > sleepAfter) return setMood("sleep");
+	if (isAwake()) {
+		// Keep-awake is on: the pet never sleeps — it stands guard instead.
+		if (state.mood === "idle" && since > 8_000) return setMood("guard");
+		if (state.mood === "guard" && state.frameIdx % 16 === 0) state.message = pick(MESSAGES.guard);
+	} else {
+		// A starving pet tires out and nods off far sooner.
+		const sleepAfter = state.energy < 15 ? 30_000 : 90_000;
+		if (state.mood === "idle" && since > sleepAfter) return setMood("sleep");
+	}
 	if (state.mood === "idle" && state.frameIdx % 16 === 0) state.message = pick(idlePool());
 	render();
 }
@@ -291,7 +297,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 
 	// --- /pokemon command ---------------------------------------------------
 	pi.registerCommand("pokemon", {
-		description: "pokemon: list | choose <name> | nick <n> | feed | stats | hide | show",
+		description: "pokemon: list | choose <name> | nick <n> | feed | awake [reason] | sleep | stats | hide | show",
 		handler: async (args, ctx) => {
 			ctxRef = ctx;
 			const [cmd, ...rest] = args.trim().split(/\s+/);
@@ -338,6 +344,43 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 					render();
 					return ctx.ui.notify("Back! ♥", "info");
 
+				case "awake":
+				case "caffeinate": {
+					const sub = value.toLowerCase();
+					if (sub === "status") {
+						const info = awakeInfo();
+						return ctx.ui.notify(
+							info.active
+								? `Keeping system awake via ${info.method}${info.reason ? ` — “${info.reason}”` : ""}. /pokemon sleep to release.`
+								: "Keep-awake is off.",
+							"info",
+						);
+					}
+					// Anything else (including empty) starts keep-awake, using it as the reason.
+					const reason = sub === "on" ? "" : value;
+					const res = startAwake(reason, (msg) => ctx.ui.notify(`⚠️ ${msg}`, "error"));
+					if (!res.supported) return ctx.ui.notify(`⚠️ Keep-awake isn't supported on ${process.platform}.`, "error");
+					if (!res.ok) return ctx.ui.notify("⚠️ Couldn't start keep-awake (inhibitor failed to launch).", "error");
+					lastRendered = "";
+					setMood("guard", { message: reason ? `on watch: ${reason} ☕` : "on watch — system stays awake ☕" });
+					return ctx.ui.notify(
+						`☕ Your laptop will stay awake${reason ? ` (${reason})` : ""} — sleep is blocked via ${res.method}. Run /pokemon sleep to allow it to sleep again.`,
+						"info",
+					);
+				}
+
+				case "sleep": {
+					if (isAwake()) {
+						stopAwake();
+						lastRendered = "";
+						setMood("sleep", { message: "lock released — nap time 💤" });
+						return ctx.ui.notify("💤 Keep-awake released — your laptop can sleep normally again (not forcing sleep now).", "info");
+					}
+					lastRendered = "";
+					setMood("sleep", { message: pick(MESSAGES.sleep) });
+					return ctx.ui.notify(`💤 Keep-awake wasn't on. ${displayName()} curls up for a nap (your power settings are unchanged).`, "info");
+				}
+
 				case "stats": {
 					const evs = readEvents();
 					const dayAgo = Date.now() - 86_400_000;
@@ -355,8 +398,9 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 
 				default: {
 					const tier = tierOf(state.sessions);
+					const awake = isAwake() ? " · ☕ awake" : "";
 					return ctx.ui.notify(
-						`${displayName()} the ${mon().name} (${mon().type}) · ${tier} · ${state.sessions} sessions · energy ${Math.round(state.energy)} · mood ${state.mood}`,
+						`${displayName()} the ${mon().name} (${mon().type}) · ${tier} · ${state.sessions} sessions · energy ${Math.round(state.energy)} · mood ${state.mood}${awake}`,
 						"info",
 					);
 				}
