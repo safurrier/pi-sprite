@@ -29,42 +29,70 @@ function isVersionBumped(baseVal, newVal) {
 	return current.patch > base.patch;
 }
 
-// Helper to check if CHANGELOG.md has been modified
-function isChangelogModified(baseBranch) {
+// Helper to get all modified files compared to the base branch
+function getModifiedFiles(baseBranch) {
 	try {
-		// 1. Check local uncommitted changes
-		const localChanges = execSync("git status --porcelain", { encoding: "utf8" });
-		const localLines = localChanges.split("\n").map((line) => line.trim());
-		const hasUncommittedChanges = localLines.some((line) => {
-			// Extract file path from git status (typically starts with M, A, ?? etc.)
-			// Format: "XY path/to/file"
-			const parts = line.split(/\s+/);
-			if (parts.length < 2) return false;
-			const filePath = parts.slice(1).join(" ");
-			return filePath.toLowerCase() === "changelog.md";
-		});
-
-		if (hasUncommittedChanges) {
-			return true;
+		// Ensure base branch is fetched first to allow diffing
+		try {
+			execSync(`git fetch origin ${baseBranch} --depth=1`, { stdio: "ignore" });
+		} catch (fetchErr) {
+			console.warn(`⚠️ Warning: Could not fetch base branch origin/${baseBranch}: ${fetchErr.message.trim()}`);
 		}
 
-		// 2. Check committed changes relative to the base branch
-		// git diff --name-only origin/<baseBranch>...HEAD checks the differences introduced by the PR branch
+		// 1. Get uncommitted files
+		const localChanges = execSync("git status --porcelain", { encoding: "utf8" });
+		const localFiles = localChanges
+			.split("\n")
+			.map((line) => {
+				const parts = line.trim().split(/\s+/);
+				return parts.length >= 2 ? parts.slice(1).join(" ") : "";
+			})
+			.filter(Boolean);
+
+		// 2. Get committed changes relative to the base branch
 		let diffFiles;
 		try {
 			diffFiles = execSync(`git diff --name-only origin/${baseBranch}...HEAD`, { encoding: "utf8" });
 		} catch (diffErr) {
 			console.warn(`⚠️ Warning: git diff three-dot comparison failed: ${diffErr.message.trim()}`);
 			console.log("📡 Falling back to direct two-dot tree comparison...");
-			// Fallback: compare trees directly, which works even on shallow clones with no merge base
-			diffFiles = execSync(`git diff --name-only origin/${baseBranch} HEAD`, { encoding: "utf8" });
+			try {
+				diffFiles = execSync(`git diff --name-only origin/${baseBranch} HEAD`, { encoding: "utf8" });
+			} catch (fallbackErr) {
+				console.warn(`⚠️ Warning: Direct two-dot tree comparison failed: ${fallbackErr.message.trim()}`);
+				diffFiles = "";
+			}
 		}
-		const changedFiles = diffFiles.split("\n").map((f) => f.trim());
-		return changedFiles.some((file) => file.toLowerCase() === "changelog.md");
+		const committedFiles = diffFiles
+			.split("\n")
+			.map((f) => f.trim())
+			.filter(Boolean);
+
+		// Combine and return unique files
+		return Array.from(new Set([...localFiles, ...committedFiles]));
 	} catch (err) {
-		console.warn(`⚠️ Warning: Could not check changelog modifications via git: ${err.message}`);
-		return false;
+		console.warn(`⚠️ Warning: Could not retrieve list of modified files: ${err.message}`);
+		return [];
 	}
+}
+
+// Helper to determine if any package-affecting files were modified
+function shouldRunReleaseChecks(modifiedFiles) {
+	if (modifiedFiles.length === 0) {
+		// If we can't determine, play it safe and run the checks
+		return true;
+	}
+
+	return modifiedFiles.some((file) => {
+		const f = file.toLowerCase();
+		return (
+			f.startsWith("extensions/") ||
+			f === "package.json" ||
+			f === "readme.md" ||
+			f === "changelog.md" ||
+			f === "license"
+		);
+	});
 }
 
 function main() {
@@ -72,13 +100,26 @@ function main() {
 	const eventName = process.env.GITHUB_EVENT_NAME;
 	const baseBranch = process.env.GITHUB_BASE_REF || "main";
 
-	let hasError = false;
-
 	console.log("--------------------------------------------------");
 	console.log("🔍 Running Release Readiness Checks...");
 	console.log("--------------------------------------------------");
 
-	// ==================== 1. Package Version Check ====================
+	// 1. Determine modified files first
+	console.log("📡 Retrieving list of modified files...");
+	const modifiedFiles = getModifiedFiles(baseBranch);
+
+	// 2. Run smart bypass check
+	if (!shouldRunReleaseChecks(modifiedFiles)) {
+		console.log(
+			"\nℹ️ Skipping release readiness checks: No package-affecting files (source code, README, CHANGELOG, etc.) were modified.",
+		);
+		console.log("🎉 All release readiness checks bypassed!");
+		process.exit(0);
+	}
+
+	let hasError = false;
+
+	// ==================== Check 1: package.json Version Bump ====================
 	console.log("\n📦 Check 1: package.json Version Bump");
 	console.log("--------------------------------------");
 
@@ -95,10 +136,6 @@ function main() {
 	// Determine base version to compare against
 	let baseVersion = null;
 	try {
-		// Fetch base branch to compare versions
-		console.log(`📡 Fetching origin/${baseBranch} to compare versions...`);
-		execSync(`git fetch origin ${baseBranch} --depth=1`, { stdio: "ignore" });
-
 		const basePkgStr = execSync(`git show origin/${baseBranch}:package.json`, { encoding: "utf8" });
 		const basePkg = JSON.parse(basePkgStr);
 		baseVersion = basePkg.version;
@@ -128,11 +165,11 @@ function main() {
 		}
 	}
 
-	// ==================== 2. CHANGELOG Check ====================
+	// ==================== Check 2: CHANGELOG Check ====================
 	console.log("\n📝 Check 2: CHANGELOG.md Modifications");
 	console.log("--------------------------------------");
 
-	const changelogOk = isChangelogModified(baseBranch);
+	const changelogOk = modifiedFiles.some((file) => file.toLowerCase() === "changelog.md");
 	if (changelogOk) {
 		console.log("✅ Success! CHANGELOG.md has been modified in this branch or locally.");
 	} else {
