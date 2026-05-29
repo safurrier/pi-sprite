@@ -19,6 +19,7 @@
  * affiliated with or endorsed by them. The ASCII art is original.
  */
 
+import { type ChildProcess, spawn } from "node:child_process";
 import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { bar, c, dim } from "./colors.ts";
@@ -47,6 +48,86 @@ import { greeting, loadSaved, logEvent, readEvents, saveState, state, tierOf } f
 let ctxRef: ExtensionContext | undefined;
 let animTimer: ReturnType<typeof setInterval> | null = null;
 let lastRendered = "";
+
+// ---------------------------------------------------------------------------
+// Keep-awake (system sleep inhibitor)
+// ---------------------------------------------------------------------------
+// Holds a child process that blocks the OS from sleeping while the pet is on
+// watch. macOS uses `caffeinate`, Linux uses `systemd-inhibit`. Windows is not
+// supported (no reliable built-in CLI inhibitor).
+
+let awakeProc: ChildProcess | null = null;
+let awakeMethod = "";
+let awakeReason = "";
+
+function isAwake(): boolean {
+	return awakeProc !== null && awakeProc.exitCode === null && !awakeProc.killed;
+}
+
+function awakeInfo(): { active: boolean; method: string; reason: string } {
+	return { active: isAwake(), method: awakeMethod, reason: awakeReason };
+}
+
+function startAwake(
+	reason: string,
+	onError: (msg: string) => void,
+): { supported: boolean; ok: boolean; method?: string } {
+	if (isAwake()) return { supported: true, ok: true, method: "already running" };
+
+	let cmd: string;
+	let args: string[];
+	let method: string;
+	if (process.platform === "darwin") {
+		cmd = "caffeinate";
+		// -d display, -i idle, -m disk, -s system (on AC), -u declare user active
+		args = ["-dimsu"];
+		method = "caffeinate";
+	} else if (process.platform === "linux") {
+		cmd = "systemd-inhibit";
+		args = [
+			"--what=idle:sleep",
+			"--who=pi-pokepet",
+			`--why=${reason || "keeping awake"}`,
+			"--mode=block",
+			"sleep",
+			"infinity",
+		];
+		method = "systemd-inhibit";
+	} else {
+		return { supported: false, ok: false };
+	}
+
+	try {
+		const proc = spawn(cmd, args, { stdio: "ignore", detached: false });
+		proc.on("error", (err) => {
+			awakeProc = null;
+			onError(`keep-awake failed: ${err.message}`);
+		});
+		proc.on("exit", () => {
+			if (awakeProc === proc) awakeProc = null;
+		});
+		awakeProc = proc;
+		awakeMethod = method;
+		awakeReason = reason;
+		return { supported: true, ok: true, method };
+	} catch {
+		awakeProc = null;
+		return { supported: true, ok: false };
+	}
+}
+
+function stopAwake(): void {
+	if (awakeProc && awakeProc.exitCode === null) {
+		try {
+			awakeProc.kill();
+		} catch {
+			/* ignore */
+		}
+	}
+	awakeProc = null;
+	awakeMethod = "";
+	awakeReason = "";
+}
 
 const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!;
 const mon = (): Mon => MON[state.monKey] ?? MON.pikachu!;
@@ -104,15 +185,12 @@ function tick(): void {
 	const busy = state.mood === "talking" || state.mood === "thinking" || state.mood === "working";
 	if (busy && !state.toolActive && since > 1500) return setMood("idle");
 	if ((state.mood === "happy" || state.mood === "panic" || state.mood === "hatch") && since > 3000) return setMood("idle");
-	if (isAwake()) {
-		// Keep-awake is on: the pet never sleeps — it stands guard instead.
-		if (state.mood === "idle" && since > 8_000) return setMood("guard");
-		if (state.mood === "guard" && state.frameIdx % 16 === 0) state.message = pick(MESSAGES.guard);
-	} else {
-		// A starving pet tires out and nods off far sooner.
-		const sleepAfter = state.energy < 15 ? 30_000 : 90_000;
-		if (state.mood === "idle" && since > sleepAfter) return setMood("sleep");
-	}
+	// Keep-awake is on: the pet never sleeps — it stands guard instead.
+	if (state.mood === "idle" && since > 8_000) return setMood("guard");
+	if (state.mood === "guard" && state.frameIdx % 16 === 0) state.message = pick(MESSAGES.guard);
+	// A starving pet tires out and nods off far sooner.
+	const sleepAfter = state.energy < 15 ? 30_000 : 90_000;
+	if (state.mood === "idle" && since > sleepAfter) return setMood("sleep");
 	if (state.mood === "idle" && state.frameIdx % 16 === 0) state.message = pick(idlePool());
 	render();
 }
@@ -289,6 +367,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", async () => {
 		saveState();
+		stopAwake();
 		if (animTimer) {
 			clearInterval(animTimer);
 			animTimer = null;
