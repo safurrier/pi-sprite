@@ -29,3 +29,7 @@ jobs:
 
       - name: Run Biome lint
         run: npm run lint
+
+      - name: Verify package version bump (PR only)
+        if: github.event_name == 'pull_request'
+        run: npm run check-version
