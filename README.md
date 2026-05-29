@@ -108,13 +108,35 @@ every session. Other ways to load it:
 No build step and no runtime dependencies — the extension ships as TypeScript and pi
 loads it directly.
 
+## Project structure (for contributors)
+
+The extension is split into small modules so it's easy to fork and customize:
+
+```
+extensions/
+├── index.ts     entry point: event wiring, rendering, /pokemon command
+├── mons.ts      the Pokémon roster + frame builder   (add your own here)
+├── content.ts   all messages + intent detection      (tweak words here)
+├── state.ts     runtime state + cross-session persistence
+└── colors.ts    256-color ANSI helpers
+```
+
+`package.json` points pi at `extensions/index.ts`; the other files are plain relative
+imports (e.g. `import { MON } from "./mons.ts"`). There's **no build step** — pi loads
+the TypeScript directly via jiti.
+
+- **Add a Pokémon:** add an entry to `MON` in `mons.ts` (a 3-line `top`/`bottom`, a
+  `mid(eyes)` builder, a `color`, a `tag`, and some `quirks`). It appears in
+  `/pokemon list` automatically.
+- **Change what it says:** edit the arrays in `content.ts`.
+
 ## How it works
 
-A single pi extension that listens to lifecycle events (`session_start`,
-`turn_start`/`turn_end`, `message_update`, `tool_call`, `tool_result`, `agent_start`,
-`model_select`, `session_compact`, `session_shutdown`, …), renders an animated widget
-via `ctx.ui.setWidget()`, and turns the streaming spinner into a spinning Poké Ball
-via `ctx.ui.setWorkingIndicator()`. State persists to small files under `~/.pi/agent/`.
+It listens to pi lifecycle events (`session_start`, `turn_start`/`turn_end`,
+`message_update`, `tool_call`, `tool_result`, `agent_start`, `model_select`,
+`session_compact`, `session_shutdown`, …), renders an animated widget via
+`ctx.ui.setWidget()`, and turns the streaming spinner into a spinning Poké Ball via
+`ctx.ui.setWorkingIndicator()`. State persists to small files under `~/.pi/agent/`.
 
 ## License
 

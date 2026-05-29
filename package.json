@@ -14,7 +14,7 @@
     "companion"
   ],
   "license": "MIT",
-  "author": "djdiptayan1",
+  "author": "djdiptayan",
   "homepage": "https://github.com/djdiptayan1/pi-pokepet#readme",
   "repository": {
     "type": "git",
@@ -24,7 +24,8 @@
     "url": "https://github.com/djdiptayan1/pi-pokepet/issues"
   },
   "pi": {
-    "extensions": ["./extensions"]
+    "extensions": ["./extensions/index.ts"],
+    "image": "https://raw.githubusercontent.com/djdiptayan1/pi-pokepet/main/demo.png"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
