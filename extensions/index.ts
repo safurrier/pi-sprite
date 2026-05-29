@@ -23,22 +23,22 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { bar, c, dim } from "./colors.ts";
-import { type Mon, type Mood, MON, MOOD_COLOR, buildFrame } from "./mons.ts";
 import {
 	CELEBRATORY,
+	detectIntent,
 	FILE_REACT,
+	fileCategory,
 	INTENT_FAIL,
 	INTENT_OK,
 	INTENT_RUN,
+	isMcpTool,
 	MCP_LINES,
 	MESSAGES,
 	SUBAGENT_LINES,
 	TIME_LINES,
-	detectIntent,
-	fileCategory,
-	isMcpTool,
 	timeBucket,
 } from "./content.ts";
+import { buildFrame, MON, MOOD_COLOR, type Mon, type Mood } from "./mons.ts";
 import { greeting, loadSaved, logEvent, readEvents, saveState, state, tierOf } from "./state.ts";
 
 // ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ function stopAwake(): void {
 	awakeReason = "";
 }
 
-const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!;
+const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!;
 const mon = (): Mon => MON[state.monKey] ?? MON.pikachu!;
 const displayName = (): string => state.nick || mon().name;
 
@@ -156,8 +156,11 @@ function setMood(mood: Mood, opts: { message?: string } = {}): void {
 // ---------------------------------------------------------------------------
 
 function render(): void {
-	if (!ctxRef || !ctxRef.hasUI) return;
-	if (!state.visible) return ctxRef.ui.setWidget("pokepet", undefined);
+	if (!ctxRef?.hasUI) return;
+	if (!state.visible) {
+		ctxRef.ui.setWidget("pokepet", undefined);
+		return;
+	}
 
 	const m = mon();
 	const frame = buildFrame(m, state.mood, state.frameIdx, {
@@ -183,14 +186,26 @@ function tick(): void {
 	// Active moods revert to idle once the model/tool goes quiet — but never while a
 	// tool is still running (long bash/test would otherwise make the pet doze off).
 	const busy = state.mood === "talking" || state.mood === "thinking" || state.mood === "working";
-	if (busy && !state.toolActive && since > 1500) return setMood("idle");
-	if ((state.mood === "happy" || state.mood === "panic" || state.mood === "hatch") && since > 3000) return setMood("idle");
+	if (busy && !state.toolActive && since > 1500) {
+		setMood("idle");
+		return;
+	}
+	if ((state.mood === "happy" || state.mood === "panic" || state.mood === "hatch") && since > 3000) {
+		setMood("idle");
+		return;
+	}
 	// Keep-awake is on: the pet never sleeps — it stands guard instead.
-	if (state.mood === "idle" && since > 8_000) return setMood("guard");
+	if (state.mood === "idle" && since > 8_000) {
+		setMood("guard");
+		return;
+	}
 	if (state.mood === "guard" && state.frameIdx % 16 === 0) state.message = pick(MESSAGES.guard);
 	// A starving pet tires out and nods off far sooner.
 	const sleepAfter = state.energy < 15 ? 30_000 : 90_000;
-	if (state.mood === "idle" && since > sleepAfter) return setMood("sleep");
+	if (state.mood === "idle" && since > sleepAfter) {
+		setMood("sleep");
+		return;
+	}
 	if (state.mood === "idle" && state.frameIdx % 16 === 0) state.message = pick(idlePool());
 	render();
 }
@@ -304,7 +319,9 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			state.lastIntent = undefined;
 			if (inFlow) return setMood("happy", { message: "flow state! beautiful~ ✦" });
 			const fname = path ? basename(path) : "";
-			return setMood("working", { message: fname ? `✎ ${fname}` : pick(FILE_REACT[path ? fileCategory(path) : "code"]) });
+			return setMood("working", {
+				message: fname ? `✎ ${fname}` : pick(FILE_REACT[path ? fileCategory(path) : "code"]),
+			});
 		}
 
 		if (tool === "bash") {
@@ -331,7 +348,8 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			state.failStreak++;
 			if (intent === "test") logEvent("test-fail");
 			if (intent === "build") logEvent("build-fail");
-			const msg = state.failStreak >= 3 ? "hang in there! *warm hug*" : intent ? pick(INTENT_FAIL[intent]) : pick(MESSAGES.panic);
+			const msg =
+				state.failStreak >= 3 ? "hang in there! *warm hug*" : intent ? pick(INTENT_FAIL[intent]) : pick(MESSAGES.panic);
 			setMood("panic", { message: msg });
 		} else {
 			const recovered = state.failStreak >= 2;
@@ -395,8 +413,8 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 					state.nick = "";
 					saveState();
 					lastRendered = "";
-					setMood("happy", { message: `I choose you, ${MON[key]!.name}! ✦` });
-					return ctx.ui.notify(`Now partnered with ${MON[key]!.name}`, "info");
+					setMood("happy", { message: `I choose you, ${MON[key]?.name}! ✦` });
+					return ctx.ui.notify(`Now partnered with ${MON[key]?.name}`, "info");
 				}
 
 				case "nick":
@@ -453,11 +471,17 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 						stopAwake();
 						lastRendered = "";
 						setMood("sleep", { message: "lock released — nap time 💤" });
-						return ctx.ui.notify("💤 Keep-awake released — your laptop can sleep normally again (not forcing sleep now).", "info");
+						return ctx.ui.notify(
+							"💤 Keep-awake released — your laptop can sleep normally again (not forcing sleep now).",
+							"info",
+						);
 					}
 					lastRendered = "";
 					setMood("sleep", { message: pick(MESSAGES.sleep) });
-					return ctx.ui.notify(`💤 Keep-awake wasn't on. ${displayName()} curls up for a nap (your power settings are unchanged).`, "info");
+					return ctx.ui.notify(
+						`💤 Keep-awake wasn't on. ${displayName()} curls up for a nap (your power settings are unchanged).`,
+						"info",
+					);
 				}
 
 				case "stats": {

@@ -8,8 +8,7 @@ const RESET = "\x1b[0m";
 const DIM = "\x1b[2m";
 
 /** Wrap text in a 256-color foreground code. */
-export const c = (code: number, text: string): string =>
-	NO_COLOR ? text : `\x1b[38;5;${code}m${text}${RESET}`;
+export const c = (code: number, text: string): string => (NO_COLOR ? text : `\x1b[38;5;${code}m${text}${RESET}`);
 
 /** Dim text. */
 export const dim = (text: string): string => (NO_COLOR ? text : `${DIM}${text}${RESET}`);

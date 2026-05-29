@@ -12,12 +12,26 @@ export const MESSAGES: Record<Mood, string[]> = {
 	hatch: ["ready when you are~"],
 	idle: ["just vibing", "*blinks*", "what shall we build?", "i'm here if you need me", "*stretches*"],
 	talking: ["ooh, go on...", "*listening*", "i love a good plan", "mhm, mhm!", "tell me more~"],
-	thinking: ["hmm... *ponders*", "*deep in thought*", "lemme think...", "🤔 cooking...", "*gears turning*", "reasoning it through~"],
+	thinking: [
+		"hmm... *ponders*",
+		"*deep in thought*",
+		"lemme think...",
+		"🤔 cooking...",
+		"*gears turning*",
+		"reasoning it through~",
+	],
 	working: ["*scribbles notes*", "on it!", "crunching...", "*focus mode*", "tippy-tappy"],
 	happy: ["yaaay! ✦", "we did it!", "*happy dance*", "clean run! ✦", "*sparkles*"],
 	panic: ["uh oh...", "*nervous*", "we'll fix it!", "deep breaths...", "you got this!"],
 	sleep: ["*snoozing* zzz", "wake me when it's go time", "*dreams of berries*"],
-	guard: ["on watch ☕", "keeping your system awake~", "*stands guard*", "no sleep 'til it's done", "i've got the night shift", "powering through for you"],
+	guard: [
+		"on watch ☕",
+		"keeping your system awake~",
+		"*stands guard*",
+		"no sleep 'til it's done",
+		"i've got the night shift",
+		"powering through for you",
+	],
 };
 
 export const TIME_LINES: Record<string, string[]> = {
@@ -37,14 +51,41 @@ export const FILE_REACT: Record<string, string[]> = {
 };
 
 export type Intent =
-	| "test" | "commit" | "push" | "pull" | "merge" | "rebase" | "stash" | "checkout"
-	| "build" | "lint" | "install" | "server" | "docker" | "network" | "search"
-	| "pr" | "prmerge" | "review" | "dangerous";
+	| "test"
+	| "commit"
+	| "push"
+	| "pull"
+	| "merge"
+	| "rebase"
+	| "stash"
+	| "checkout"
+	| "build"
+	| "lint"
+	| "install"
+	| "server"
+	| "docker"
+	| "network"
+	| "search"
+	| "pr"
+	| "prmerge"
+	| "review"
+	| "dangerous";
 
 /** Intents worth a celebration on success. */
 export const CELEBRATORY: ReadonlySet<Intent> = new Set<Intent>([
-	"test", "commit", "push", "pull", "merge", "rebase", "build", "lint", "install", "server",
-	"pr", "prmerge", "review",
+	"test",
+	"commit",
+	"push",
+	"pull",
+	"merge",
+	"rebase",
+	"build",
+	"lint",
+	"install",
+	"server",
+	"pr",
+	"prmerge",
+	"review",
 ]);
 
 export const INTENT_RUN: Record<Intent, string> = {
@@ -130,7 +171,8 @@ export function detectIntent(cmd: string): Intent | undefined {
 	if (/gh\s+pr\s+merge/.test(x)) return "prmerge";
 	if (/gh\s+pr\s+create/.test(x)) return "pr";
 	if (/gh\s+pr\s+(review|diff|view|checks|checkout)|git\s+request-pull/.test(x)) return "review";
-	if (/\b(vitest|jest|pytest|go test|cargo test|rspec|phpunit)\b|(npm|yarn|pnpm|bun)\s+(run\s+)?test/.test(x)) return "test";
+	if (/\b(vitest|jest|pytest|go test|cargo test|rspec|phpunit)\b|(npm|yarn|pnpm|bun)\s+(run\s+)?test/.test(x))
+		return "test";
 	if (/git\s+commit/.test(x)) return "commit";
 	if (/git\s+push/.test(x)) return "push";
 	if (/git\s+pull|git\s+fetch/.test(x)) return "pull";
@@ -139,9 +181,11 @@ export function detectIntent(cmd: string): Intent | undefined {
 	if (/git\s+stash/.test(x)) return "stash";
 	if (/git\s+(checkout|switch)/.test(x)) return "checkout";
 	if (/\b(docker|docker-compose|kubectl|helm|podman)\b/.test(x)) return "docker";
-	if (/(npm|yarn|pnpm|bun)\s+(run\s+)?(dev|start|serve)|next\s+dev|vite\b|nodemon|uvicorn|flask run|rails s/.test(x)) return "server";
+	if (/(npm|yarn|pnpm|bun)\s+(run\s+)?(dev|start|serve)|next\s+dev|vite\b|nodemon|uvicorn|flask run|rails s/.test(x))
+		return "server";
 	if (/\b(tsc|webpack|rollup|esbuild|make)\b|(npm|yarn|pnpm|bun)\s+(run\s+)?build/.test(x)) return "build";
-	if (/\b(biome|eslint|prettier|ruff|black|gofmt|clippy)\b|(npm|yarn|pnpm|bun)\s+(run\s+)?(lint|format)/.test(x)) return "lint";
+	if (/\b(biome|eslint|prettier|ruff|black|gofmt|clippy)\b|(npm|yarn|pnpm|bun)\s+(run\s+)?(lint|format)/.test(x))
+		return "lint";
 	if (/(npm|yarn|pnpm|bun)\s+(install|add|i)\b|pip\s+install|cargo\s+add|go\s+get/.test(x)) return "install";
 	if (/\b(curl|wget|http|ping|nc)\b/.test(x)) return "network";
 	if (/\b(grep|rg|ag|find|fd|ls|cat|less|tail|head)\b/.test(x)) return "search";
@@ -150,9 +194,28 @@ export function detectIntent(cmd: string): Intent | undefined {
 
 /** Known MCP server name prefixes (pi exposes MCP tools as `<server>_<tool>`). */
 const MCP_PREFIXES = [
-	"firecrawl", "linear", "context7", "github", "gitlab", "playwright", "puppeteer",
-	"notion", "slack", "obsidian", "sentry", "stripe", "supabase", "figma", "atlassian",
-	"postgres", "sqlite", "filesystem", "memory", "fetch", "brave", "exa",
+	"firecrawl",
+	"linear",
+	"context7",
+	"github",
+	"gitlab",
+	"playwright",
+	"puppeteer",
+	"notion",
+	"slack",
+	"obsidian",
+	"sentry",
+	"stripe",
+	"supabase",
+	"figma",
+	"atlassian",
+	"postgres",
+	"sqlite",
+	"filesystem",
+	"memory",
+	"fetch",
+	"brave",
+	"exa",
 ];
 
 /** Detect whether a tool call is going through an MCP server / gateway. */

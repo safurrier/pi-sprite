@@ -1,39 +1,48 @@
 {
-  "name": "pi-pokepet",
-  "version": "1.2.2",
-  "description": "A cute, colorful Pokémon companion for the pi coding agent. Pick a Pokémon that lives below your editor and reacts to tools, tests, commits, PRs, reviews, subagents, model swaps and more — pure ASCII, works in any terminal. Unofficial fan project.",
-  "keywords": [
-    "pi-package",
-    "pi",
-    "pi-extension",
-    "pokemon",
-    "pet",
-    "tamagotchi",
-    "statusline",
-    "ascii",
-    "companion"
-  ],
-  "license": "MIT",
-  "author": "djdiptayan",
-  "homepage": "https://github.com/djdiptayan1/pi-pokepet#readme",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/djdiptayan1/pi-pokepet.git"
-  },
-  "bugs": {
-    "url": "https://github.com/djdiptayan1/pi-pokepet/issues"
-  },
-  "pi": {
-    "extensions": ["./extensions/index.ts"],
-    "image": "https://raw.githubusercontent.com/djdiptayan1/pi-pokepet/main/demo.png"
-  },
-  "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*"
-  },
-  "files": [
-    "extensions",
-    "README.md",
-    "LICENSE",
-    "CHANGELOG.md"
-  ]
+	"name": "pi-pokepet",
+	"version": "1.2.2",
+	"description": "A cute, colorful Pokémon companion for the pi coding agent. Pick a Pokémon that lives below your editor and reacts to tools, tests, commits, PRs, reviews, subagents, model swaps and more — pure ASCII, works in any terminal. Unofficial fan project.",
+	"keywords": [
+		"pi-package",
+		"pi",
+		"pi-extension",
+		"pokemon",
+		"pet",
+		"tamagotchi",
+		"statusline",
+		"ascii",
+		"companion"
+	],
+	"license": "MIT",
+	"author": "djdiptayan",
+	"homepage": "https://github.com/djdiptayan1/pi-pokepet#readme",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/djdiptayan1/pi-pokepet.git"
+	},
+	"bugs": {
+		"url": "https://github.com/djdiptayan1/pi-pokepet/issues"
+	},
+	"pi": {
+		"extensions": [
+			"./extensions/index.ts"
+		],
+		"image": "https://raw.githubusercontent.com/djdiptayan1/pi-pokepet/main/demo.png"
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*"
+	},
+	"scripts": {
+		"lint": "biome check .",
+		"lint:fix": "biome check --write ."
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.16"
+	},
+	"files": [
+		"extensions",
+		"README.md",
+		"LICENSE",
+		"CHANGELOG.md"
+	]
 }

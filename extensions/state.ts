@@ -96,7 +96,11 @@ export function logEvent(type: string): void {
 export function readEvents(): { t: number; type: string }[] {
 	try {
 		if (!existsSync(EVENT_FILE)) return [];
-		return readFileSync(EVENT_FILE, "utf8").trim().split("\n").slice(-2000).map((l) => JSON.parse(l));
+		return readFileSync(EVENT_FILE, "utf8")
+			.trim()
+			.split("\n")
+			.slice(-2000)
+			.map((l) => JSON.parse(l));
 	} catch {
 		return [];
 	}
