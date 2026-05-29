@@ -50,7 +50,15 @@ function isChangelogModified(baseBranch) {
 
 		// 2. Check committed changes relative to the base branch
 		// git diff --name-only origin/<baseBranch>...HEAD checks the differences introduced by the PR branch
-		const diffFiles = execSync(`git diff --name-only origin/${baseBranch}...HEAD`, { encoding: "utf8" });
+		let diffFiles;
+		try {
+			diffFiles = execSync(`git diff --name-only origin/${baseBranch}...HEAD`, { encoding: "utf8" });
+		} catch (diffErr) {
+			console.warn(`⚠️ Warning: git diff three-dot comparison failed: ${diffErr.message.trim()}`);
+			console.log("📡 Falling back to direct two-dot tree comparison...");
+			// Fallback: compare trees directly, which works even on shallow clones with no merge base
+			diffFiles = execSync(`git diff --name-only origin/${baseBranch} HEAD`, { encoding: "utf8" });
+		}
 		const changedFiles = diffFiles.split("\n").map((f) => f.trim());
 		return changedFiles.some((file) => file.toLowerCase() === "changelog.md");
 	} catch (err) {
