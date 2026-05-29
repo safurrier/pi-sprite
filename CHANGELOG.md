@@ -1,5 +1,44 @@
 # Changelog
 
+## 1.4.0 — detailed mode
+
+### Added
+
+- **`/pokemon large` — detailed art mode.** Switch the footer pet from the
+  compact 3-line sprite to big, hand-drawn, fully animated line art. The default
+  stays compact, so existing behavior is unchanged — large is strictly opt-in.
+  - `/pokemon large` enlarges your current partner.
+  - `/pokemon large <name>` switches to and previews a specific Pokémon.
+  - `/pokemon small` (alias `compact`) returns to the compact pet.
+  - `large`/`big` and `small`/`compact` aliases both work.
+- **Detailed sprites for all 7 Pokémon**, each 15–16 lines with distinctive,
+  recognizable features: Pikachu (ears, cheeks, zig-zag tail), Charmander
+  (snout, belly, flame tail), Squirtle (hexagon shell, curled tail), Bulbasaur
+  (ears, wide smile, back bulb), Eevee (fox ears, fluffy ruff, bushy tail),
+  Jigglypuff (round body, hair curl), Psyduck (three sprigs, hands-to-head).
+
+### Behavior
+
+- Detailed mode reuses the **same** `tick()`→`render()` animation loop, mood
+  eyes, energy-gated sway, and accents as the compact sprite, so it blinks,
+  bobs (working), dances (happy), jitters (panic), naps with `z` (sleep), and
+  stands guard with `☕` — identical to before, just bigger.
+- Render size is tracked in `state.size` (`"small"` | `"large"`), defaulting to
+  `"small"` each session.
+
+### Compatibility
+
+- Cross-terminal safe on **macOS, Windows, and Linux**: the body uses only
+  box-drawing + ASCII characters (no wide emoji inside the art, which would tear
+  column alignment), eye glyphs reuse the set the compact mode already ships,
+  and `NO_COLOR` is honored.
+
+### Internal
+
+- New `extensions/sprites.ts` holds the large art map + animated frame builder.
+- `extensions/mons.ts` now exports `EYES`, `WEAK_EYES`, and `THOUGHTS` so both
+  the compact and detailed renderers share one animation vocabulary.
+
 ## 1.3.1
 
 - Switch to secure, passwordless NPM OIDC Trusted Publishing to bypass 2FA safely.

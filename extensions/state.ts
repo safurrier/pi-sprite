@@ -22,6 +22,7 @@ export interface PokeState {
 	frameIdx: number;
 	message: string;
 	visible: boolean;
+	size: "small" | "large";
 	lastActivity: number;
 	lastIntent?: Intent;
 	sessions: number;
@@ -40,6 +41,7 @@ export const state: PokeState = {
 	frameIdx: 0,
 	message: "",
 	visible: true,
+	size: "small",
 	lastActivity: Date.now(),
 	sessions: 0,
 	firstMet: new Date().toISOString(),
