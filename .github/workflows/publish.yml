@@ -12,6 +12,7 @@ jobs:
   publish:
     name: Publish Package
     runs-on: ubuntu-latest
+    environment: poke pet
 
     steps:
       - name: Checkout
