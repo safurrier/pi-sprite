@@ -39,6 +39,7 @@ import {
 	timeBucket,
 } from "./content.ts";
 import { buildFrame, MON, MOOD_COLOR, type Mon, type Mood } from "./mons.ts";
+import { buildLargeFrame, hasLargeArt } from "./sprites.ts";
 import { greeting, loadSaved, logEvent, readEvents, saveState, state, tierOf } from "./state.ts";
 
 // ---------------------------------------------------------------------------
@@ -163,10 +164,11 @@ function render(): void {
 	}
 
 	const m = mon();
-	const frame = buildFrame(m, state.mood, state.frameIdx, {
-		lively: state.energy > 60,
-		weak: state.energy < 15,
-	});
+	const frameOpts = { lively: state.energy > 60, weak: state.energy < 15 };
+	const frame =
+		state.size === "large"
+			? buildLargeFrame(state.monKey, m, state.mood, state.frameIdx, frameOpts)
+			: buildFrame(m, state.mood, state.frameIdx, frameOpts);
 	const bodyColor = MOOD_COLOR[state.mood] ?? m.color;
 	const lines = frame.map((line) => c(bodyColor, line));
 
@@ -394,7 +396,8 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 
 	// --- /pokemon command ---------------------------------------------------
 	pi.registerCommand("pokemon", {
-		description: "pokemon: list | choose <name> | nick <n> | feed | awake [reason] | sleep | stats | hide | show",
+		description:
+			"pokemon: list | choose <name> | large [name] | small | nick <n> | feed | awake [reason] | sleep | stats | hide | show",
 		handler: async (args, ctx) => {
 			ctxRef = ctx;
 			const [cmd, ...rest] = args.trim().split(/\s+/);
@@ -429,6 +432,32 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 					saveState();
 					setMood("happy", { message: pick(["*nom nom* thank you!", "a berry! best trainer ✦", "*happy wiggle*"]) });
 					return ctx.ui.notify(`Fed ${displayName()} a berry  (energy ${Math.round(state.energy)})`, "info");
+
+				case "large":
+				case "big": {
+					const key = value.toLowerCase();
+					if (key && !MON[key]) return ctx.ui.notify(`Unknown. Try: ${Object.keys(MON).join(", ")}`, "error");
+					if (key && MON[key]) {
+						state.monKey = key;
+						state.nick = "";
+						saveState();
+					}
+					state.size = "large";
+					state.visible = true;
+					lastRendered = "";
+					render();
+					const note = hasLargeArt(state.monKey)
+						? `Detailed mode ✦ — ${displayName()} the ${mon().name}  (/pokemon small to shrink)`
+						: `Detailed mode on — no large art for ${mon().name} yet, showing the default. (/pokemon small to shrink)`;
+					return ctx.ui.notify(note, "info");
+				}
+
+				case "small":
+				case "compact":
+					state.size = "small";
+					lastRendered = "";
+					render();
+					return ctx.ui.notify("Back to compact mode. (/pokemon large for detailed art)", "info");
 
 				case "hide":
 					state.visible = false;

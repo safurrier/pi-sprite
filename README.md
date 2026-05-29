@@ -99,6 +99,8 @@ in your terminal — the colored square shows which:
 /pokemon                    status
 /pokemon list               list available Pokémon
 /pokemon choose <name>      pick your Pokémon
+/pokemon large [name]       switch to detailed, animated big art
+/pokemon small              back to the compact footer pet
 /pokemon nick <nickname>    give it a nickname
 /pokemon feed               give a berry (restores energy)
 /pokemon awake [reason]     keep your system from sleeping (e.g. long build)

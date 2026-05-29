@@ -104,7 +104,7 @@ export const MON: Record<string, Mon> = {
 	},
 };
 
-const EYES: Record<Mood, string[]> = {
+export const EYES: Record<Mood, string[]> = {
 	hatch: ["o.o"],
 	idle: ["o.o", "-.-"],
 	talking: ["o.o", "O.o"],
@@ -117,10 +117,10 @@ const EYES: Record<Mood, string[]> = {
 };
 
 /** Droopy, half-closed eyes used when the pet is starving (low energy). */
-const WEAK_EYES = ["-.-", "u.u"];
+export const WEAK_EYES = ["-.-", "u.u"];
 
 /** Cycling thought bubble shown while the model is reasoning. */
-const THOUGHTS = ["", " .", " ..", " ...", " 💭"];
+export const THOUGHTS = ["", " .", " ..", " ...", " 💭"];
 
 /** Shift a line right by `n` columns to simulate horizontal motion. */
 const lift = (s: string, n: number): string => (n > 0 ? " ".repeat(n) + s : s);
