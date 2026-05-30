@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Replaced the generic working-line text with pet-aware, repo-aware messages so Pi feels more like a playful coding companion during active work.
+- Improved contrast on the working/status text so it reads more clearly in the terminal UI.
+
 ## 1.4.0 — detailed mode
 
 ### Added

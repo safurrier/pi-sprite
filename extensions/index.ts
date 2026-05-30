@@ -37,6 +37,7 @@ import {
 	SUBAGENT_LINES,
 	TIME_LINES,
 	timeBucket,
+	workingMessage,
 } from "./content.ts";
 import { buildFrame, MON, MOOD_COLOR, type Mon, type Mood } from "./mons.ts";
 import { buildLargeFrame, hasLargeArt } from "./sprites.ts";
@@ -152,6 +153,16 @@ function setMood(mood: Mood, opts: { message?: string } = {}): void {
 	render();
 }
 
+function setWorkingLine(phase: Parameters<typeof workingMessage>[1], detail?: string): void {
+	if (!ctxRef?.hasUI) return;
+	ctxRef.ui.setWorkingMessage(ctxRef.ui.theme.fg("warning", workingMessage(state.monKey, phase, detail)));
+}
+
+function clearWorkingLine(): void {
+	if (!ctxRef?.hasUI) return;
+	ctxRef.ui.setWorkingMessage();
+}
+
 // ---------------------------------------------------------------------------
 // Render + animation
 // ---------------------------------------------------------------------------
@@ -170,9 +181,17 @@ function render(): void {
 			? buildLargeFrame(state.monKey, m, state.mood, state.frameIdx, frameOpts)
 			: buildFrame(m, state.mood, state.frameIdx, frameOpts);
 	const bodyColor = MOOD_COLOR[state.mood] ?? m.color;
+	const messageColor =
+		state.mood === "working" || state.mood === "thinking"
+			? 226
+			: state.mood === "panic"
+				? 203
+				: state.mood === "happy"
+					? 84
+					: 250;
 	const lines = frame.map((line) => c(bodyColor, line));
 
-	lines.push(`${c(m.color, displayName())} ${m.tag}  ${dim(state.message)}`);
+	lines.push(`${c(m.color, displayName())} ${m.tag}  ${c(messageColor, state.message)}`);
 	lines.push(dim(`${c(203, "♥")}${bar(state.energy)} ${Math.round(state.energy)}`));
 
 	const signature = lines.join("\n");
@@ -249,7 +268,13 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		setMood("hatch", { message: tierUp ? `${tier.toUpperCase()} unlocked! ✦` : greeting(tier, state.sessions, mon()) });
 
 		ctx.ui.setWorkingIndicator({ frames: BALL, intervalMs: 150 });
+		ctx.ui.setWorkingVisible(true);
 		if (!animTimer) animTimer = setInterval(tick, 450);
+	});
+
+	pi.on("turn_start", async () => {
+		setWorkingLine("agent");
+		setMood("working");
 	});
 
 	// The stream tells us *what* the model is doing: reasoning, writing, or
@@ -260,6 +285,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		if (/^thinking/.test(type)) {
 			if (state.mood !== "thinking") setMood("thinking");
 			else state.lastActivity = Date.now();
+			setWorkingLine("thinking");
 			return;
 		}
 
@@ -267,6 +293,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			// Composing a tool call — the upcoming tool_call event sets the real message.
 			if (state.mood !== "working") setMood("working");
 			else state.lastActivity = Date.now();
+			setWorkingLine("tool");
 			return;
 		}
 
@@ -274,8 +301,6 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		if (state.mood !== "talking") setMood("talking");
 		else state.lastActivity = Date.now();
 	});
-
-	pi.on("turn_start", async () => setMood("working"));
 
 	// Keep the pet alive (and animating) for the full duration of a tool run.
 	pi.on("tool_execution_start", async () => {
@@ -298,18 +323,21 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		// Subagent / autonomous delegation (the `subagent`/`task` tool).
 		if (/^(subagent|task|dispatch_agent|agent_)/i.test(tool)) {
 			state.lastIntent = undefined;
+			setWorkingLine("subagent");
 			return setMood("happy", { message: pick(SUBAGENT_LINES) });
 		}
 
 		// MCP tool usage (server-prefixed names like firecrawl_*, linear_*, or the mcp gateway).
 		if (isMcpTool(tool)) {
 			state.lastIntent = undefined;
+			setWorkingLine("mcp");
 			return setMood("working", { message: pick(MCP_LINES) });
 		}
 
 		// PR / review tools (gh, Linear diff, etc.)
 		if (/diff|review|pull_request|\bpr_|get_diff/i.test(tool)) {
 			state.lastIntent = "review";
+			setWorkingLine("review");
 			return setMood("working", { message: INTENT_RUN.review });
 		}
 
@@ -319,6 +347,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			const inFlow = noteEdit();
 			logEvent("edit");
 			state.lastIntent = undefined;
+			setWorkingLine("file", path ? basename(path) : undefined);
 			if (inFlow) return setMood("happy", { message: "flow state! beautiful~ ✦" });
 			const fname = path ? basename(path) : "";
 			return setMood("working", {
@@ -329,15 +358,18 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		if (tool === "bash") {
 			const intent = detectIntent(String(input.command ?? ""));
 			state.lastIntent = intent;
+			setWorkingLine("working", intent ? INTENT_RUN[intent] : undefined);
 			return setMood("working", { message: intent ? INTENT_RUN[intent] : pick(MESSAGES.working) });
 		}
 
 		if (/^(read|grep|glob|ls|find|search)/.test(tool)) {
 			state.lastIntent = "search";
+			setWorkingLine("search");
 			return setMood("working", { message: pick(["*exploring...*", "reading up...", "*sniffs around*"]) });
 		}
 
 		state.lastIntent = undefined;
+		setWorkingLine("tool");
 		setMood("working");
 	});
 
@@ -370,6 +402,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("turn_end", async () => {
+		clearWorkingLine();
 		if (state.mood === "working" || state.mood === "talking") setMood("happy");
 		else setMood("idle");
 		saveState();
@@ -378,15 +411,22 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 	// --- pi advanced features ----------------------------------------------
 	// agent_start/agent_end fire once per user prompt (not per subagent) — keep them
 	// low-key; real subagent dispatch is detected via the tool_call above.
-	pi.on("agent_start", async () => setMood("working", { message: pick(MESSAGES.working) }));
+	pi.on("agent_start", async () => {
+		setWorkingLine("agent");
+		setMood("working", { message: pick(MESSAGES.working) });
+	});
 	pi.on("agent_end", async () => setMood("happy", { message: "all wrapped up! ✦" }));
 	pi.on("model_select", async () => setMood("happy", { message: "feeling a new power! (model swap) ✦" }));
-	pi.on("thinking_level_select", async () => setMood("working", { message: "powering up... *thinking harder*" }));
+	pi.on("thinking_level_select", async () => {
+		setWorkingLine("thinking");
+		setMood("working", { message: "powering up... *thinking harder*" });
+	});
 	pi.on("session_before_fork", async () => setMood("happy", { message: "splitting timelines! (fork)" }));
 	pi.on("session_compact", async () => setMood("sleep", { message: "tidying my memory... (compacting)" }));
 
 	pi.on("session_shutdown", async () => {
 		saveState();
+		clearWorkingLine();
 		stopAwake();
 		if (animTimer) {
 			clearInterval(animTimer);

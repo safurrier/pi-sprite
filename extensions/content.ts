@@ -34,6 +34,125 @@ export const MESSAGES: Record<Mood, string[]> = {
 	],
 };
 
+export type WorkingPhase =
+	| "agent"
+	| "thinking"
+	| "working"
+	| "search"
+	| "tool"
+	| "file"
+	| "subagent"
+	| "mcp"
+	| "review";
+
+const WORKING_BASE: Record<WorkingPhase, string[]> = {
+	agent: [
+		"booting the tiny brain",
+		"checking the map before we move",
+		"settling into the problem space",
+		"gathering the threads",
+	],
+	thinking: [
+		"testing the hypothesis",
+		"holding the shape of the argument",
+		"reading the code like a long proof",
+		"looking for the invariant",
+	],
+	working: ["moving pieces into place", "tightening the screws", "closing the loop", "shaping the next pass"],
+	search: [
+		"following the breadcrumbs",
+		"cross-checking the evidence",
+		"walking the repo trail",
+		"listening for the bug's footprint",
+	],
+	tool: [
+		"consulting the tools",
+		"letting the machine answer back",
+		"asking the outside world a careful question",
+		"running the experiment",
+	],
+	file: [
+		"editing with a careful hand",
+		"writing the next sentence of the codebase",
+		"nudging the file toward the truth",
+		"rewiring the local story",
+	],
+	subagent: [
+		"splitting into parallel thoughts",
+		"sending a scout down another branch",
+		"delegating to a smaller brain",
+		"forking the reasoning stream",
+	],
+	mcp: [
+		"consulting the wider ecosystem",
+		"asking the network for receipts",
+		"cross-checking against remote facts",
+		"talking to the world beyond the repo",
+	],
+	review: [
+		"reading with a reviewer’s eye",
+		"checking for edge cases and missing seams",
+		"pulling the logic apart before it pulls us apart",
+		"looking for the hidden regression",
+	],
+};
+
+const WORKING_VOICES: Record<string, string[]> = {
+	pikachu: [
+		"zapping the rough edges clean",
+		"charging straight at the edge case",
+		"debugging at lightning speed",
+		"poking the circuit until it sings",
+	],
+	charmander: [
+		"warming up the code path",
+		"fanning the ember into a feature",
+		"keeping the flame of the plan alive",
+		"making the hot path behave",
+	],
+	squirtle: [
+		"cooling the hot path",
+		"flowing through the stack without panic",
+		"keeping the shape of the system calm",
+		"washing the dust off the logic",
+	],
+	bulbasaur: [
+		"growing the idea leaf by leaf",
+		"rooting through the structure",
+		"letting the fix take root",
+		"tending the code garden",
+	],
+	eevee: [
+		"choosing the best evolution for the idea",
+		"holding a few possible futures in mind",
+		"adapting to the shape of the repo",
+		"keeping the options open until the last mile",
+	],
+	jigglypuff: [
+		"turning the bug report into a lullaby",
+		"humming the rough patch into harmony",
+		"softening the rough edges with a tune",
+		"keeping the rhythm while the code settles",
+	],
+	psyduck: [
+		"staring at the bug until it confesses",
+		"wandering through the fog but still finding the clue",
+		"accidentally brilliant, probably on purpose",
+		"holding its head and solving the mystery anyway",
+	],
+};
+
+function workingPool(monKey: string, phase: WorkingPhase): string[] {
+	return [...(WORKING_BASE[phase] ?? WORKING_BASE.working), ...(WORKING_VOICES[monKey] ?? WORKING_VOICES.pikachu)];
+}
+
+export function workingMessage(monKey: string, phase: WorkingPhase, detail?: string): string {
+	const pool = workingPool(monKey, phase);
+	const pickIndex = Math.floor(Math.random() * pool.length);
+	const line = pool[pickIndex] ?? WORKING_BASE.working[0]!;
+	return detail ? `${line} · ${detail}` : line;
+}
+
 export const TIME_LINES: Record<string, string[]> = {
 	morning: ["morning! coffee first?", "fresh start ✦", "sunrise coding hits different"],
 	afternoon: ["afternoon grind~", "post-lunch focus", "halfway there!"],
