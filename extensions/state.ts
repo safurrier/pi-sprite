@@ -16,7 +16,9 @@ const STATE_FILE = join(DIR, "pokepet-state.json");
 const EVENT_FILE = join(DIR, "pokepet-events.jsonl");
 
 export interface PokeState {
-	monKey: string;
+	style: "ascii" | "image";
+	asciiPetKey: string;
+	imagePetSlug: string;
 	nick: string;
 	mood: Mood;
 	frameIdx: number;
@@ -35,7 +37,9 @@ export interface PokeState {
 }
 
 export const state: PokeState = {
-	monKey: "pikachu",
+	style: "ascii",
+	asciiPetKey: "pikachu",
+	imagePetSlug: "",
 	nick: "",
 	mood: "hatch",
 	frameIdx: 0,
@@ -51,9 +55,14 @@ export const state: PokeState = {
 	toolActive: false,
 };
 
-interface SavedState {
-	monKey: string;
+export interface SavedState {
+	style: "ascii" | "image";
+	asciiPetKey: string;
+	imagePetSlug: string;
+	/** Legacy key from versions that only supported the ASCII Pokemon roster. */
+	monKey?: string;
 	nick: string;
+	size: "small" | "large";
 	sessions: number;
 	firstMet: string;
 	lastSeen: string;
@@ -69,12 +78,30 @@ export function loadSaved(): Partial<SavedState> {
 	return {};
 }
 
+export function applySavedState(saved: Partial<SavedState>, hasAsciiPet: (key: string) => boolean): void {
+	const asciiKey = saved.asciiPetKey || saved.monKey;
+	if (asciiKey && hasAsciiPet(asciiKey)) state.asciiPetKey = asciiKey;
+	if (saved.style === "image" || saved.style === "ascii") state.style = saved.style;
+	if (typeof saved.imagePetSlug === "string") state.imagePetSlug = saved.imagePetSlug;
+	if (typeof saved.nick === "string") state.nick = saved.nick;
+	if (saved.size === "large" || saved.size === "small") state.size = saved.size;
+	if (saved.firstMet) state.firstMet = saved.firstMet;
+	if (typeof saved.energy === "number") {
+		const mins = saved.lastSeen ? (Date.now() - Date.parse(saved.lastSeen)) / 60_000 : 0;
+		state.energy = Math.max(0, Math.min(100, saved.energy - mins * 0.02));
+	}
+	state.sessions = (saved.sessions ?? 0) + 1;
+}
+
 export function saveState(): void {
 	try {
 		mkdirSync(DIR, { recursive: true });
 		const data: SavedState = {
-			monKey: state.monKey,
+			style: state.style,
+			asciiPetKey: state.asciiPetKey,
+			imagePetSlug: state.imagePetSlug,
 			nick: state.nick,
+			size: state.size,
 			sessions: state.sessions,
 			firstMet: state.firstMet,
 			lastSeen: new Date().toISOString(),
