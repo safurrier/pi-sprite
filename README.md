@@ -1,25 +1,18 @@
-# pi-pokepet ⚡
+# pi-pokepet
 
-A cute, colorful **Pokémon companion** for the [pi coding agent](https://pi.dev).
+A colorful pet companion for the [pi coding agent](https://pi.dev).
 
-Pick a Pokémon and it lives below your editor, reacting in real time to what pi is
-doing — running tools, writing files, running tests, opening PRs, getting reviews,
-spinning up subagents, switching models, compacting, and more.
+`pi-pokepet` lives below your editor and reacts in real time while pi thinks,
+talks, runs tools, edits files, opens PRs, reviews code, compacts sessions, and
+more.
 
-Pure ASCII + 256-color ANSI, so it looks great in **Terminal.app, Warp**, and every
-other terminal — **no image/graphics protocol required**.
+It has two visual styles:
 
-![pi-pokepet](https://raw.githubusercontent.com/djdiptayan1/pi-pokepet/main/demo.png)
-
-```
- /\_/\     Pikachu ⚡  ALL GREEN! ✦
-(^o^)      ♥▓▓▓░ 78
- >⚡<
-```
-
-> **Unofficial fan project.** Pokémon and Pokémon character names are trademarks of
-> Nintendo, Creatures Inc., and GAME FREAK Inc. This project is not affiliated with,
-> sponsored by, or endorsed by them. All ASCII art here is original, stylized fan work.
+- **Petdex image pets**: animated Codex-style sprite pets from
+  [Petdex](https://github.com/crafter-station/petdex), rendered with Pi's
+  native terminal image support when available and ANSI terminal pixels as a
+  fallback.
+- **ASCII pets**: the original compact and large terminal line-art roster.
 
 ## Install
 
@@ -27,203 +20,178 @@ other terminal — **no image/graphics protocol required**.
 pi install npm:pi-pokepet
 ```
 
-Then start (or run `/reload` in) pi. Your Pokémon appears below the editor.
-
-Try it for a single run without installing:
+Try it for one run:
 
 ```bash
 pi -e npm:pi-pokepet
 ```
 
-## The roster
-
-Pick one with `/pokemon choose <name>`. Each one **renders in its own type color**
-in your terminal — the colored square shows which:
-
-#### Pikachu &nbsp;·&nbsp; ⚡ Electric &nbsp;·&nbsp; 🟨 yellow
-```
- /\_/\
-(o.o)
- >⚡<
-```
-
-#### Charmander &nbsp;·&nbsp; 🔥 Fire &nbsp;·&nbsp; 🟧 orange
-```
-  ,--,
-<o.o>
- ~(🔥)
-```
-
-#### Squirtle &nbsp;·&nbsp; 💧 Water &nbsp;·&nbsp; 🟦 blue
-```
-  _=_
-(o.o)
- <(_)>
-```
-
-#### Bulbasaur &nbsp;·&nbsp; 🍃 Grass &nbsp;·&nbsp; 🟩 green
-```
-  (~)
-(o.o)
- /---\
-```
-
-#### Eevee &nbsp;·&nbsp; ✦ Normal &nbsp;·&nbsp; 🟫 tan
-```
- /v__v\
-(o.o)
- >  <~
-```
-
-#### Jigglypuff &nbsp;·&nbsp; ♪ Fairy &nbsp;·&nbsp; 🩷 pink
-```
-  .--.
-(o.o)
-  '--'
-```
-
-#### Psyduck &nbsp;·&nbsp; ? Water &nbsp;·&nbsp; 🟨 pale yellow
-```
-  \_/
-(o.o)
-  J L
-```
-
-> The eyes and tails animate, and change with mood — `(o.o)` idle, `(•.•)` thinking,
-> `(^o^)` happy, `(@.@)` working, `(O.O)` panic, `(u.u)` asleep. The colored banner above shows the
-> whole team's type colors at a glance.
-
 ## Commands
 
-```
-/pokemon                    status
-/pokemon list               list available Pokémon
-/pokemon choose <name>      pick your Pokémon
-/pokemon large [name]       switch to detailed, animated big art
-/pokemon small              back to the compact footer pet
-/pokemon nick <nickname>    give it a nickname
-/pokemon feed               give a berry (restores energy)
-/pokemon awake [reason]     keep your system from sleeping (e.g. long build)
-/pokemon sleep              release the lock, allow sleep again (pet naps)
-/pokemon stats              productivity + bond dashboard
-/pokemon hide | show        toggle the widget
-```
-
-## Keeping your system awake ☕
-
-Got something running in the background and don't want your machine to sleep? Tell
-your Pokémon to stand guard:
-
-```
-/pokemon awake training the model      # start, with a reason
-/pokemon awake status                  # check what's holding the lock
-/pokemon sleep                         # release it (and the pet naps 💤)
+```text
+/pet                         status
+/pet style image             use Petdex image pets
+/pet style ascii             use the legacy ASCII roster
+/pet list                    list pets for the active style
+/pet choose <id>             choose an installed Petdex pet or ASCII pet
+/pet gallery [query]         search the public Petdex gallery
+/pet install <slug>          download and select a Petdex gallery pet
+/pet large                   enlarge the active pet
+/pet small                   return to compact size
+/pet nick <nickname>         give it a nickname
+/pet feed                    restore energy
+/pet awake [reason]          keep your system from sleeping
+/pet sleep                   release keep-awake or make the pet nap
+/pet stats                   productivity and bond dashboard
+/pet hide | show             toggle the widget
 ```
 
-While it's on, the pet switches to a vigilant **guard** mood (☕) and refuses to
-sleep. It works on every OS using the native inhibitor — **no dependencies**:
+`/pokemon` is no longer registered. Use `/pet style ascii` for the original
+ASCII pets.
 
-| OS | Mechanism |
-|---|---|
-| macOS | `caffeinate -dimsu` |
-| Linux | `systemd-inhibit` (idle:sleep, block mode) |
-| Windows | `SetThreadExecutionState` via PowerShell |
+## Petdex Image Pets
 
-Every inhibitor is tied to pi's own process, so the lock **auto-releases when pi
-exits or crashes** — your machine is never left awake forever. It's also released on
-`/pokemon sleep` and on session shutdown.
+Petdex pets use the Codex sprite format:
 
-## What it reacts to
-
-**Moods (animated):** appears → **thinks** while the model reasons (floating with a
-💭 bubble) → talks while it streams a reply → works during tool calls → celebrates on
-success → panics on errors → sleeps when idle. The *body* animates too — working
-bobs, happy dances side to side, panic jitters.
-
-**MCP & subagents:** MCP tool calls (`firecrawl_*`, `linear_*`, the `mcp` gateway…) →
-*"chatting with a tool-spirit..."*; dispatching a subagent → *"go, partner!"*.
-
-**Tools & commands** (detected from tool calls): tests, git (commit / push / pull /
-merge / rebase / stash / checkout), build, lint, install, dev-server, docker,
-network, search, and dangerous commands (`rm -rf`, `sudo`…).
-
-**PRs & reviews:** `gh pr create` / `merge` / `review`, and review/diff tools →
-*"opening a PR..."*, *"PR merged! evolution complete ✦"*, *"looks good to me!"*.
-
-**pi advanced features:** subagents (`go, partner!`), model swaps
-(`feeling a new power!`), thinking-level changes (`powering up...`), session forks
-(`splitting timelines!`), and compaction (`tidying my memory...`).
-
-**File-aware:** shows the filename you're editing (`✎ auth.ts`) and reacts by type
-(tests, docs, styles, config, code).
-
-**Time-aware:** different idle lines for morning, evening, late-night, and weekends.
-
-**Flow & struggle:** 4 rapid edits → *"flow state! beautiful~"*; 3 failures in a row →
-*"hang in there! *warm hug*"*; recovery → *"redemption arc complete!"*.
-
-**Energy:** a `♥` meter that drifts down over time and is restored with
-`/pokemon feed`. It now **matters** — a starving pet (low `♥`) droops its eyes,
-barely moves, and nods off quickly; a well-fed one (high `♥`) does the full bouncy
-dance.
-
-## Bond tiers (cross-session memory)
-
-Your Pokémon remembers you in `~/.pi/agent/pokepet-state.json`:
-
-| Tier | After |
-|---|---|
-| Stranger | 0 sessions |
-| Buddy | 3 sessions |
-| Partner | 15 sessions |
-| Bestie | 50 sessions |
-
-## Setting it up in pi
-
-`pi install npm:pi-pokepet` writes the package to your pi settings and loads it on
-every session. Other ways to load it:
-
-| Goal | How |
-|---|---|
-| Install for all projects | `pi install npm:pi-pokepet` |
-| Install for one project (shareable) | `pi install -l npm:pi-pokepet` (writes `.pi/settings.json`) |
-| Try once, no install | `pi -e npm:pi-pokepet` |
-| Remove | `pi remove npm:pi-pokepet` |
-| Enable/disable later | `pi config` |
-
-No build step and no runtime dependencies — the extension ships as TypeScript and pi
-loads it directly.
-
-## Project structure (for contributors)
-
-The extension is split into small modules so it's easy to fork and customize:
-
+```text
+~/.codex/pets/<slug>/
+|-- pet.json
+`-- spritesheet.webp  # or spritesheet.png
 ```
+
+The spritesheet is an **8 column x 9 row atlas**. Rows are animation states:
+`idle`, `run right`, `run left`, `wave`, `jump`, `failed`, `waiting`,
+`running`, `review`.
+
+Install one directly from the Petdex gallery:
+
+```text
+/pet gallery boba
+/pet install boba
+```
+
+Or install with the Petdex CLI first:
+
+```bash
+npx petdex install boba
+```
+
+Then select it in pi:
+
+```text
+/pet style image
+/pet choose boba
+```
+
+Image pets render through Pi's native TUI image component on terminals with
+Kitty or iTerm2-compatible image support. This keeps the original Petdex frame
+as a real PNG, so pets look much closer to Codex-style sprite pets instead of
+being converted into text pixels.
+
+Native image mode is expected to work in Kitty, Ghostty, WezTerm, and iTerm2.
+Windows Terminal does not expose a Pi-supported image protocol yet, so this
+version uses the ANSI half-block fallback there. The fallback is rendered through
+a Pi component widget, not a plain string widget, so it can use a taller frame
+budget without being cut off by Pi's default string-widget line cap.
+
+If `NO_COLOR` is set and native images are available, pi-pokepet still renders
+the native image and only removes text/status color. If `NO_COLOR` is set and
+native images are unavailable, image mode falls back to ASCII and notifies once.
+
+Small and large mode set display budgets only; the Petdex source frame is never
+cropped for native rendering. Long pet names and mood messages wrap onto
+additional lines.
+
+## Mood Mapping
+
+pi-pokepet maps pi activity to Petdex rows:
+
+| pi mood | Petdex row |
+| --- | --- |
+| idle, sleep | idle |
+| talking | wave |
+| thinking | review |
+| working | running |
+| review tools | review |
+| happy, hatch | jump |
+| panic | failed |
+| guard | waiting |
+
+The animation loop uses each row's standard Petdex frame count.
+
+## ASCII Roster
+
+The original ASCII pets remain available with `/pet style ascii`:
+
+- Pikachu
+- Charmander
+- Squirtle
+- Bulbasaur
+- Eevee
+- Jigglypuff
+- Psyduck
+
+Use `/pet large` for detailed line art and `/pet small` for the compact footer
+pet.
+
+If the terminal is too narrow for a detailed ASCII drawing, pi-pokepet shows the
+compact ASCII frame instead of allowing the large frame to be truncated.
+
+> The ASCII roster is an unofficial fan project. Pokemon and Pokemon character
+> names are trademarks of Nintendo, Creatures Inc., and GAME FREAK Inc. This
+> project is not affiliated with, sponsored by, or endorsed by them. The ASCII
+> art is original, stylized fan work.
+
+## What It Reacts To
+
+- model thinking, talking, and tool-call composition
+- tests, builds, linting, installs, dev servers, Docker, network checks
+- git commits, pushes, pulls, merges, rebases, stashes, checkouts
+- PR creation, PR merges, review and diff tools
+- file edits with filename-aware messages
+- MCP tools and subagent dispatch
+- model swaps, thinking-level changes, forks, and compaction
+- flow state, repeated failures, and recovery
+
+Energy persists across sessions in `~/.pi/agent/pokepet-state.json`. Event stats
+persist in `~/.pi/agent/pokepet-events.jsonl`.
+
+Native Petdex PNG frames are cached under:
+
+```text
+~/.pi/agent/pokepet-cache/petdex-native/
+```
+
+ANSI fallback frames are cached under:
+
+```text
+~/.pi/agent/pokepet-cache/petdex/
+```
+
+## Development
+
+```bash
+npm install
+npm run lint
+npm test
+```
+
+Project structure:
+
+```text
 extensions/
-├── index.ts     entry point: event wiring, rendering, /pokemon command
-├── mons.ts      the Pokémon roster + frame builder   (add your own here)
-├── content.ts   all messages + intent detection      (tweak words here)
-├── state.ts     runtime state + cross-session persistence
-└── colors.ts    256-color ANSI helpers
+|-- index.ts                  entry point, events, /pet command, render routing
+|-- petdex.ts                 local Petdex loading and gallery installs
+|-- petdex-native-renderer.ts sprite atlas to native PNG frames
+|-- petdex-widget.ts          Pi TUI Image widget for native rendering
+|-- petdex-renderer.ts        sprite atlas to ANSI fallback frames
+|-- mons.ts                   legacy ASCII roster and compact frame builder
+|-- sprites.ts                legacy large ASCII art
+|-- content.ts                mood lines and intent detection
+|-- state.ts                  persistence and migration
+`-- colors.ts                 ANSI color helpers
 ```
-
-`package.json` points pi at `extensions/index.ts`; the other files are plain relative
-imports (e.g. `import { MON } from "./mons.ts"`). There's **no build step** — pi loads
-the TypeScript directly via jiti.
-
-- **Add a Pokémon:** add an entry to `MON` in `mons.ts` (a 3-line `top`/`bottom`, a
-  `mid(eyes)` builder, a `color`, a `tag`, and some `quirks`). It appears in
-  `/pokemon list` automatically.
-- **Change what it says:** edit the arrays in `content.ts`.
-
-## How it works
-
-It listens to pi lifecycle events (`session_start`, `turn_start`/`turn_end`,
-`message_update`, `tool_call`, `tool_result`, `agent_start`, `model_select`,
-`session_compact`, `session_shutdown`, …), renders an animated widget via
-`ctx.ui.setWidget()`, and turns the streaming spinner into a spinning Poké Ball via
-`ctx.ui.setWorkingIndicator()`. State persists to small files under `~/.pi/agent/`.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT - see [LICENSE](./LICENSE).

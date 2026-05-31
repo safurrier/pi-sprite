@@ -8,6 +8,9 @@
 			}
 		}
 	},
+	"files": {
+		"includes": ["**", "!.pi"]
+	},
 	"linter": {
 		"enabled": true,
 		"rules": {

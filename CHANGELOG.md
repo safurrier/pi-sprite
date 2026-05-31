@@ -1,5 +1,49 @@
 # Changelog
 
+## 1.6.0 - Native Petdex image rendering
+
+- Added a native Petdex renderer that extracts full sprite-sheet frames as PNGs
+  and renders them through Pi's TUI `Image` component on Kitty/iTerm2-compatible
+  terminals.
+- Preserved the full Petdex frame box for native image pets so small and large
+  modes scale display size without cropping sprite content.
+- Added native frame caching under
+  `~/.pi/agent/pokepet-cache/petdex-native/<slug>/<hash>/`.
+- Kept the ANSI truecolor half-block renderer as the fallback for terminals
+  without Pi native image support, including Windows Terminal in this version.
+- Moved ASCII and ANSI fallback output to component widgets so large pets are not
+  cut off by Pi's plain string-widget line cap.
+- Increased ANSI fallback detail budgets for small and large Petdex pets now
+  that fallback rendering is no longer constrained by the plain string-widget
+  cap.
+- Changed `NO_COLOR` behavior so native image rendering still works when
+  available; only ANSI fallback color output is blocked.
+- Added native renderer/widget tests for PNG extraction, Kitty/iTerm2 image
+  sequences, unsupported-terminal fallback detection, and display budgets.
+- Added `@earendil-works/pi-tui` as a direct runtime dependency.
+
+## 1.5.0 - Petdex image pets
+
+- Added `/pet` as the new command surface and removed `/pokemon` registration.
+- Added Petdex image mode with `/pet style image`, local `~/.codex/pets`
+  discovery, `/pet gallery [query]`, and `/pet install <slug>`.
+- Added ANSI truecolor half-block rendering for Petdex 8-column x 9-row sprite sheets, with
+  cached frame conversion under `~/.pi/agent/pokepet-cache/petdex/`.
+- Improved Petdex render clarity by cropping transparent sprite padding and
+  using nearest-neighbor scaling instead of smooth downsampling.
+- Prevented pet truncation by making Petdex frame width responsive to the
+  current terminal, wrapping status text, and falling back from large ASCII art
+  to compact ASCII art when the terminal is too narrow.
+- Added a row budget for Petdex image pets so tall sprites like `steve-jobs`
+  and `noir-webling` fit inside Pi's below-editor widget instead of being
+  clipped vertically.
+- Preserved the original Pokemon ASCII roster behind `/pet style ascii`, with
+  the existing compact and large modes.
+- Migrated persisted state from legacy `monKey` to `style`, `asciiPetKey`, and
+  `imagePetSlug`.
+- Added tests for Petdex metadata validation, sprite rendering, mood mapping,
+  state migration, and mocked gallery install.
+
 ## 1.4.1
 
 - Replaced the generic working-line text with pet-aware, repo-aware messages so Pi feels more like a playful coding companion during active work.
