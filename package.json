@@ -1,15 +1,17 @@
 {
 	"name": "pi-pokepet",
-	"version": "1.4.1",
-	"description": "A cute, colorful Pokémon companion for the pi coding agent. Pick a Pokémon that lives below your editor and reacts to tools, tests, commits, PRs, reviews, subagents, model swaps and more — pure ASCII, works in any terminal. Unofficial fan project.",
+	"version": "1.6.0",
+	"description": "A cute, colorful pet companion for the pi coding agent. Use classic ASCII pets or Petdex image pets that live below your editor and react to tools, tests, commits, PRs, reviews, subagents, model swaps and more.",
 	"keywords": [
 		"pi-package",
 		"pi",
 		"pi-extension",
-		"pokemon",
+		"petdex",
+		"codex-pets",
 		"pet",
 		"tamagotchi",
 		"statusline",
+		"image",
 		"ascii",
 		"companion"
 	],
@@ -35,15 +37,21 @@
 	"scripts": {
 		"lint": "biome check .",
 		"lint:fix": "biome check --write .",
+		"test": "node --test --import tsx tests/*.test.ts",
 		"check-version": "node scripts/check-version-bump.js"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.4.16"
+		"@biomejs/biome": "2.4.16",
+		"tsx": "^4.22.3"
 	},
 	"files": [
 		"extensions",
 		"README.md",
 		"LICENSE",
 		"CHANGELOG.md"
-	]
+	],
+	"dependencies": {
+		"@earendil-works/pi-tui": "^0.77.0",
+		"sharp": "^0.33.5"
+	}
 }

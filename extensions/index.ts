@@ -1,28 +1,16 @@
 /**
- * pi-pokepet — a cute, colorful Pokémon companion for the pi coding agent.
+ * pi-pokepet - a reactive pet companion for the pi coding agent.
  *
- * This file is the entry point: it wires pi's lifecycle events to the pet's
- * moods and renders the widget. The data lives in sibling modules so it's easy
- * to fork and customize:
- *
- *   colors.ts    256-color ANSI helpers
- *   mons.ts      the Pokémon roster + frame builder  (add your own here)
- *   content.ts   all the messages + intent detection (tweak words here)
- *   state.ts     runtime state + cross-session persistence
- *   index.ts     this file — event wiring, rendering, /pokemon command
- *
- * Pure ASCII + 256-color ANSI, so it renders in Terminal.app and Warp — no image
- * protocol needed.
- *
- * Disclaimer: Pokémon and Pokémon character names are trademarks of Nintendo,
- * Creatures Inc., and GAME FREAK Inc. This is an unofficial fan project, not
- * affiliated with or endorsed by them. The ASCII art is original.
+ * The public command surface is /pet. The legacy ASCII roster is still
+ * available through `style ascii`; Petdex sprite pets are available through
+ * `style image`.
  */
 
 import { type ChildProcess, spawn } from "node:child_process";
 import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { bar, c, dim } from "./colors.ts";
+import { allocateImageId } from "@earendil-works/pi-tui";
+import { bar, c, dim, NO_COLOR } from "./colors.ts";
 import {
 	CELEBRATORY,
 	detectIntent,
@@ -40,23 +28,40 @@ import {
 	workingMessage,
 } from "./content.ts";
 import { buildFrame, MON, MOOD_COLOR, type Mon, type Mood } from "./mons.ts";
+import {
+	fetchPetdexManifest,
+	installPetdexPet,
+	listLocalPetdexPets,
+	loadLocalPetdexPet,
+	type PetdexManifestPet,
+	type PetdexPet,
+} from "./petdex.ts";
+import { getNativePetdexFrame, type NativeRenderedPet, prepareNativePetdexPet } from "./petdex-native-renderer.ts";
+import type { RenderedPet } from "./petdex-renderer.ts";
+import { getRenderedPetFrame, renderPetdexPetForColumns, visibleWidth } from "./petdex-renderer.ts";
+import { buildNativePetWidget, buildTextPetWidget, supportsNativeImagePets } from "./petdex-widget.ts";
 import { buildLargeFrame, hasLargeArt } from "./sprites.ts";
-import { greeting, loadSaved, logEvent, readEvents, saveState, state, tierOf } from "./state.ts";
-
-// ---------------------------------------------------------------------------
-// Module-local UI state
-// ---------------------------------------------------------------------------
+import { applySavedState, greeting, loadSaved, logEvent, readEvents, saveState, state, tierOf } from "./state.ts";
 
 let ctxRef: ExtensionContext | undefined;
 let animTimer: ReturnType<typeof setInterval> | null = null;
 let lastRendered = "";
+let lastEnergyTick = Date.now();
+let imageFallbackNotified = false;
+let activeImagePet: PetdexPet | undefined;
+let activeImageRender: RenderedPet | undefined;
+let activeNativeImageRender: NativeRenderedPet | undefined;
+let imageRenderRefresh: Promise<void> | undefined;
+const nativeImageId = allocateImageId();
+
+const MAX_WIDGET_COLUMNS = 72;
+const MIN_WIDGET_COLUMNS = 24;
+const WIDGET_MARGIN_COLUMNS = 4;
+const STATUS_ROWS = 3;
 
 // ---------------------------------------------------------------------------
 // Keep-awake (system sleep inhibitor)
 // ---------------------------------------------------------------------------
-// Holds a child process that blocks the OS from sleeping while the pet is on
-// watch. macOS uses `caffeinate`, Linux uses `systemd-inhibit`. Windows is not
-// supported (no reliable built-in CLI inhibitor).
 
 let awakeProc: ChildProcess | null = null;
 let awakeMethod = "";
@@ -81,7 +86,6 @@ function startAwake(
 	let method: string;
 	if (process.platform === "darwin") {
 		cmd = "caffeinate";
-		// -d display, -i idle, -m disk, -s system (on AC), -u declare user active
 		args = ["-dimsu"];
 		method = "caffeinate";
 	} else if (process.platform === "linux") {
@@ -132,12 +136,70 @@ function stopAwake(): void {
 }
 
 const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)]!;
-const mon = (): Mon => MON[state.monKey] ?? MON.pikachu!;
-const displayName = (): string => state.nick || mon().name;
+const asciiMon = (): Mon => MON[state.asciiPetKey] ?? MON.pikachu!;
+
+function imageName(): string {
+	return activeImagePet?.metadata.displayName || state.imagePetSlug || "Petdex pet";
+}
+
+function displayName(): string {
+	return state.nick || (state.style === "image" ? imageName() : asciiMon().name);
+}
+
+function widgetColumns(): number {
+	const terminalColumns = process.stdout.columns || 80;
+	return Math.max(MIN_WIDGET_COLUMNS, Math.min(MAX_WIDGET_COLUMNS, terminalColumns - WIDGET_MARGIN_COLUMNS));
+}
+
+function widgetArtRows(): number {
+	const terminalRows = process.stdout.rows || 24;
+	const modeRows = state.style === "image" ? (state.size === "large" ? 18 : 12) : state.size === "large" ? 16 : 8;
+	return Math.max(4, Math.min(modeRows, terminalRows - STATUS_ROWS - 4));
+}
+
+function activeImageBackend(): "native" | "ansi" | "ascii" {
+	if (state.style !== "image") return "ascii";
+	if (supportsNativeImagePets()) return "native";
+	if (NO_COLOR) return "ascii";
+	return "ansi";
+}
+
+function wrapPlain(text: string, maxColumns: number): string[] {
+	const clean = text.replace(/\s+/g, " ").trim();
+	if (!clean) return [""];
+
+	const lines: string[] = [];
+	let line = "";
+	for (const word of clean.split(" ")) {
+		if (word.length > maxColumns) {
+			if (line) {
+				lines.push(line);
+				line = "";
+			}
+			for (let i = 0; i < word.length; i += maxColumns) lines.push(word.slice(i, i + maxColumns));
+			continue;
+		}
+		const candidate = line ? `${line} ${word}` : word;
+		if (candidate.length <= maxColumns) line = candidate;
+		else {
+			lines.push(line);
+			line = word;
+		}
+	}
+	if (line) lines.push(line);
+	return lines;
+}
+
+function statusLines(nameColor: number, tag: string, messageColor: number, maxColumns: number): string[] {
+	const plain = `${displayName()} ${tag}  ${state.message}`.trim();
+	return wrapPlain(plain, maxColumns).map((line, idx) => (idx === 0 ? c(nameColor, line) : c(messageColor, line)));
+}
 
 function idlePool(): string[] {
-	const base = [...MESSAGES.idle, ...mon().quirks, ...TIME_LINES[timeBucket()]];
-	if (state.energy < 20) base.push("*tummy rumbles* a berry? (/pokemon feed)", "running low... feed me?");
+	const base = [...MESSAGES.idle, ...TIME_LINES[timeBucket()]];
+	if (state.style === "ascii") base.push(...asciiMon().quirks);
+	else if (activeImagePet?.metadata.description) base.push(activeImagePet.metadata.description);
+	if (state.energy < 20) base.push("*tummy rumbles* a berry? (/pet feed)", "running low... feed me?");
 	return base;
 }
 
@@ -155,7 +217,7 @@ function setMood(mood: Mood, opts: { message?: string } = {}): void {
 
 function setWorkingLine(phase: Parameters<typeof workingMessage>[1], detail?: string): void {
 	if (!ctxRef?.hasUI) return;
-	ctxRef.ui.setWorkingMessage(ctxRef.ui.theme.fg("warning", workingMessage(state.monKey, phase, detail)));
+	ctxRef.ui.setWorkingMessage(ctxRef.ui.theme.fg("warning", workingMessage(state.asciiPetKey, phase, detail)));
 }
 
 function clearWorkingLine(): void {
@@ -163,9 +225,107 @@ function clearWorkingLine(): void {
 	ctxRef.ui.setWorkingMessage();
 }
 
-// ---------------------------------------------------------------------------
-// Render + animation
-// ---------------------------------------------------------------------------
+async function activateImagePet(slug: string): Promise<PetdexPet> {
+	const pet = loadLocalPetdexPet(slug);
+	if (!pet) throw new Error(`No installed Petdex pet named ${slug}. Try /pet install ${slug}`);
+	activeImagePet = pet;
+	if (activeImageBackend() === "native") {
+		activeNativeImageRender = await prepareNativePetdexPet(pet);
+		activeImageRender = undefined;
+	} else if (activeImageBackend() === "ansi") {
+		activeImageRender = await renderPetdexPetForColumns(pet, state.size, widgetColumns(), widgetArtRows());
+		activeNativeImageRender = undefined;
+	} else {
+		activeImageRender = undefined;
+		activeNativeImageRender = undefined;
+	}
+	state.imagePetSlug = pet.slug;
+	imageFallbackNotified = false;
+	lastRendered = "";
+	return pet;
+}
+
+async function ensureImageReady(): Promise<void> {
+	if (state.style !== "image" || !state.imagePetSlug) return;
+	const backend = activeImageBackend();
+	if (backend === "ascii") {
+		if (activeImagePet?.slug !== state.imagePetSlug)
+			activeImagePet = loadLocalPetdexPet(state.imagePetSlug) ?? undefined;
+		return;
+	}
+	if (
+		backend === "native" &&
+		activeImagePet?.slug === state.imagePetSlug &&
+		activeNativeImageRender?.slug === state.imagePetSlug
+	) {
+		return;
+	}
+	if (
+		backend === "ansi" &&
+		activeImagePet?.slug === state.imagePetSlug &&
+		activeImageRender?.slug === state.imagePetSlug &&
+		activeImageRender.size === state.size &&
+		activeImageRender.maxColumns === widgetColumns() &&
+		activeImageRender.maxRows === widgetArtRows()
+	) {
+		return;
+	}
+	await activateImagePet(state.imagePetSlug);
+}
+
+function refreshImageRender(): void {
+	if (imageRenderRefresh || state.style !== "image" || !state.imagePetSlug) return;
+	imageRenderRefresh = ensureImageReady()
+		.catch(() => {
+			activeImageRender = undefined;
+			activeNativeImageRender = undefined;
+		})
+		.finally(() => {
+			imageRenderRefresh = undefined;
+			lastRendered = "";
+			render();
+		});
+}
+
+function renderAsciiFrame(maxColumns: number, maxRows: number): string[] {
+	const m = asciiMon();
+	const frameIdx = Math.floor(state.frameIdx / 3);
+	const frameOpts = { lively: state.energy > 60, weak: state.energy < 15 };
+	let frame =
+		state.size === "large"
+			? buildLargeFrame(state.asciiPetKey, m, state.mood, frameIdx, frameOpts)
+			: buildFrame(m, state.mood, frameIdx, frameOpts);
+	if (frame.length > maxRows || frame.some((line) => visibleWidth(line) > maxColumns)) {
+		frame = buildFrame(m, state.mood, frameIdx, frameOpts);
+	}
+	const bodyColor = MOOD_COLOR[state.mood] ?? m.color;
+	return frame.map((line) => c(bodyColor, line));
+}
+
+function renderImageFrame(maxColumns: number, maxRows: number): string[] | undefined {
+	if (!activeImageRender || activeImageRender.slug !== state.imagePetSlug || activeImageRender.size !== state.size) {
+		refreshImageRender();
+		return undefined;
+	}
+	if (activeImageRender.maxColumns > maxColumns) {
+		refreshImageRender();
+		return undefined;
+	}
+	if (activeImageRender.maxRows > maxRows) {
+		refreshImageRender();
+		return undefined;
+	}
+	if (activeImageRender.maxColumns < maxColumns || activeImageRender.maxRows < maxRows) refreshImageRender();
+	return getRenderedPetFrame(activeImageRender, state.mood, state.frameIdx, state.lastIntent);
+}
+
+function renderNativeImageFrame() {
+	if (!activeNativeImageRender || activeNativeImageRender.slug !== state.imagePetSlug) {
+		refreshImageRender();
+		return undefined;
+	}
+	return getNativePetdexFrame(activeNativeImageRender, state.mood, state.frameIdx, state.lastIntent);
+}
 
 function render(): void {
 	if (!ctxRef?.hasUI) return;
@@ -174,13 +334,28 @@ function render(): void {
 		return;
 	}
 
-	const m = mon();
-	const frameOpts = { lively: state.energy > 60, weak: state.energy < 15 };
-	const frame =
-		state.size === "large"
-			? buildLargeFrame(state.monKey, m, state.mood, state.frameIdx, frameOpts)
-			: buildFrame(m, state.mood, state.frameIdx, frameOpts);
-	const bodyColor = MOOD_COLOR[state.mood] ?? m.color;
+	const backend = activeImageBackend();
+	if (state.style === "image" && backend === "ascii" && NO_COLOR && !imageFallbackNotified) {
+		imageFallbackNotified = true;
+		ctxRef.ui.notify(
+			"NO_COLOR is set and native terminal images are unavailable, so Petdex pets are falling back to ASCII.",
+			"info",
+		);
+	}
+
+	if (state.style === "image" && backend !== "native" && activeNativeImageRender) {
+		activeNativeImageRender = undefined;
+	}
+	if (state.style === "image" && backend !== "ansi" && activeImageRender) {
+		activeImageRender = undefined;
+	}
+
+	const maxColumns = widgetColumns();
+	const maxRows = widgetArtRows();
+	const m = asciiMon();
+	const nativeFrame = backend === "native" ? renderNativeImageFrame() : undefined;
+	const imageFrame = backend === "ansi" ? renderImageFrame(maxColumns, maxRows) : undefined;
+	const lines = nativeFrame ? [] : imageFrame?.length ? [...imageFrame] : renderAsciiFrame(maxColumns, maxRows);
 	const messageColor =
 		state.mood === "working" || state.mood === "thinking"
 			? 226
@@ -189,23 +364,56 @@ function render(): void {
 				: state.mood === "happy"
 					? 84
 					: 250;
-	const lines = frame.map((line) => c(bodyColor, line));
+	const nameColor = state.style === "image" && backend !== "ascii" ? 117 : m.color;
+	const tag = state.style === "image" && backend !== "ascii" ? "Petdex" : m.tag;
+	const status = statusLines(nameColor, tag, messageColor, maxColumns);
+	const meter = dim(`${c(203, "\u2665")}${bar(state.energy)} ${Math.round(state.energy)}`);
 
-	lines.push(`${c(m.color, displayName())} ${m.tag}  ${c(messageColor, state.message)}`);
-	lines.push(dim(`${c(203, "♥")}${bar(state.energy)} ${Math.round(state.energy)}`));
+	if (nativeFrame) {
+		const signature = [
+			"native",
+			state.size,
+			nativeFrame.filename,
+			state.mood,
+			state.message,
+			Math.round(state.energy),
+			process.stdout.rows || 24,
+		].join("\n");
+		if (signature === lastRendered) return;
+		lastRendered = signature;
+		ctxRef.ui.setWidget(
+			"pokepet",
+			() =>
+				buildNativePetWidget({
+					frame: nativeFrame,
+					imageId: nativeImageId,
+					size: state.size,
+					statusLines: status,
+					meterLine: meter,
+					terminalRows: process.stdout.rows || 24,
+				}),
+			{ placement: "belowEditor" },
+		);
+		return;
+	}
 
-	const signature = lines.join("\n");
+	lines.push(...status);
+	lines.push(meter);
+
+	const signature = [`text:${backend}`, ...lines].join("\n");
 	if (signature === lastRendered) return;
 	lastRendered = signature;
-	ctxRef.ui.setWidget("pokepet", lines, { placement: "belowEditor" });
+	ctxRef.ui.setWidget("pokepet", () => buildTextPetWidget({ lines }), { placement: "belowEditor" });
 }
 
 function tick(): void {
+	const now = Date.now();
+	const elapsed = now - lastEnergyTick;
+	lastEnergyTick = now;
 	state.frameIdx++;
-	addEnergy(-0.02);
+	addEnergy(-0.02 * (elapsed / 450));
+
 	const since = Date.now() - state.lastActivity;
-	// Active moods revert to idle once the model/tool goes quiet — but never while a
-	// tool is still running (long bash/test would otherwise make the pet doze off).
 	const busy = state.mood === "talking" || state.mood === "thinking" || state.mood === "working";
 	if (busy && !state.toolActive && since > 1500) {
 		setMood("idle");
@@ -215,19 +423,18 @@ function tick(): void {
 		setMood("idle");
 		return;
 	}
-	// Keep-awake is on: the pet never sleeps — it stands guard instead.
 	if (state.mood === "idle" && since > 8_000) {
 		setMood("guard");
 		return;
 	}
-	if (state.mood === "guard" && state.frameIdx % 16 === 0) state.message = pick(MESSAGES.guard);
-	// A starving pet tires out and nods off far sooner.
+	if (state.mood === "guard" && state.frameIdx % 40 === 0) state.message = pick(MESSAGES.guard);
+
 	const sleepAfter = state.energy < 15 ? 30_000 : 90_000;
 	if (state.mood === "idle" && since > sleepAfter) {
 		setMood("sleep");
 		return;
 	}
-	if (state.mood === "idle" && state.frameIdx % 16 === 0) state.message = pick(idlePool());
+	if (state.mood === "idle" && state.frameIdx % 40 === 0) state.message = pick(idlePool());
 	render();
 }
 
@@ -238,38 +445,72 @@ function noteEdit(): boolean {
 	return state.editTimes.length >= 4;
 }
 
-// Spinning Poké Ball inline working indicator
-const BALL = ["◓", "◑", "◒", "◐"].map((f) => c(196, f));
+const BALL = ["◓", "◑", "◒", "●"].map((f) => c(196, f));
 
-// ---------------------------------------------------------------------------
-// Extension
-// ---------------------------------------------------------------------------
+function formatGalleryPet(pet: PetdexManifestPet): string {
+	const by = pet.submittedBy ? ` by ${pet.submittedBy}` : "";
+	const kind = pet.kind ? ` (${pet.kind})` : "";
+	return `${pet.slug} - ${pet.displayName}${kind}${by}`;
+}
+
+async function choosePet(value: string): Promise<string> {
+	const key = value.toLowerCase();
+	if (!key) throw new Error("Usage: /pet choose <id>");
+
+	const installed = loadLocalPetdexPet(key);
+	if (installed) {
+		state.style = "image";
+		state.nick = "";
+		await activateImagePet(key);
+		saveState();
+		setMood("happy", { message: `${installed.metadata.displayName} joined from Petdex!` });
+		return `Now partnered with ${installed.metadata.displayName}`;
+	}
+
+	if (MON[key]) {
+		state.style = "ascii";
+		state.asciiPetKey = key;
+		state.nick = "";
+		saveState();
+		lastRendered = "";
+		setMood("happy", { message: `I choose you, ${MON[key]?.name}! ✦` });
+		return `Now partnered with ${MON[key]?.name}`;
+	}
+
+	throw new Error(`Unknown pet. Try /pet list or /pet gallery ${key}`);
+}
 
 export default function pokepetExtension(pi: ExtensionAPI) {
 	pi.on("session_start", async (_event, ctx) => {
 		ctxRef = ctx;
 		if (!ctx.hasUI) return;
 
-		const saved = loadSaved();
-		if (saved.monKey && MON[saved.monKey]) state.monKey = saved.monKey;
-		if (typeof saved.nick === "string") state.nick = saved.nick;
-		if (saved.firstMet) state.firstMet = saved.firstMet;
-		if (typeof saved.energy === "number") {
-			const mins = saved.lastSeen ? (Date.now() - Date.parse(saved.lastSeen)) / 60_000 : 0;
-			state.energy = Math.max(0, Math.min(100, saved.energy - mins * 0.02));
+		applySavedState(loadSaved(), (key) => Boolean(MON[key]));
+		if (state.style === "image" && state.imagePetSlug) {
+			try {
+				await ensureImageReady();
+			} catch (err) {
+				state.style = "ascii";
+				ctx.ui.notify(
+					`${err instanceof Error ? err.message : "Petdex pet failed to load"}; showing ASCII pet.`,
+					"error",
+				);
+			}
 		}
-		state.sessions = (saved.sessions ?? 0) + 1;
+
 		saveState();
 		logEvent("session-start");
 
 		const prev = tierOf(state.sessions - 1);
 		const tier = tierOf(state.sessions);
 		const tierUp = tier !== prev && state.sessions > 1;
-		setMood("hatch", { message: tierUp ? `${tier.toUpperCase()} unlocked! ✦` : greeting(tier, state.sessions, mon()) });
+		setMood("hatch", {
+			message: tierUp ? `${tier.toUpperCase()} unlocked! ✦` : greeting(tier, state.sessions, asciiMon()),
+		});
 
 		ctx.ui.setWorkingIndicator({ frames: BALL, intervalMs: 150 });
 		ctx.ui.setWorkingVisible(true);
-		if (!animTimer) animTimer = setInterval(tick, 450);
+		if (!animTimer) animTimer = setInterval(tick, 180);
 	});
 
 	pi.on("turn_start", async () => {
@@ -277,8 +518,6 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		setMood("working");
 	});
 
-	// The stream tells us *what* the model is doing: reasoning, writing, or
-	// composing a tool call. Give reasoning its own "thinking" mood.
 	pi.on("message_update", async (event: unknown) => {
 		const type = (event as { assistantMessageEvent?: { type?: string } })?.assistantMessageEvent?.type ?? "";
 
@@ -290,19 +529,16 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		}
 
 		if (/^toolcall/.test(type)) {
-			// Composing a tool call — the upcoming tool_call event sets the real message.
 			if (state.mood !== "working") setMood("working");
 			else state.lastActivity = Date.now();
 			setWorkingLine("tool");
 			return;
 		}
 
-		// text_* (or unknown) -> chatting with you.
 		if (state.mood !== "talking") setMood("talking");
 		else state.lastActivity = Date.now();
 	});
 
-	// Keep the pet alive (and animating) for the full duration of a tool run.
 	pi.on("tool_execution_start", async () => {
 		state.toolActive = true;
 		state.lastActivity = Date.now();
@@ -320,28 +556,24 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		const tool = e?.toolName ?? "";
 		const input = e?.input ?? {};
 
-		// Subagent / autonomous delegation (the `subagent`/`task` tool).
 		if (/^(subagent|task|dispatch_agent|agent_)/i.test(tool)) {
 			state.lastIntent = undefined;
 			setWorkingLine("subagent");
 			return setMood("happy", { message: pick(SUBAGENT_LINES) });
 		}
 
-		// MCP tool usage (server-prefixed names like firecrawl_*, linear_*, or the mcp gateway).
 		if (isMcpTool(tool)) {
 			state.lastIntent = undefined;
 			setWorkingLine("mcp");
 			return setMood("working", { message: pick(MCP_LINES) });
 		}
 
-		// PR / review tools (gh, Linear diff, etc.)
 		if (/diff|review|pull_request|\bpr_|get_diff/i.test(tool)) {
 			state.lastIntent = "review";
 			setWorkingLine("review");
 			return setMood("working", { message: INTENT_RUN.review });
 		}
 
-		// File editing tools -> file-aware reaction + flow detection.
 		if (/^(write|edit|str_replace|create|apply_patch|multi_edit)/.test(tool)) {
 			const path = String(input.path ?? input.file_path ?? input.filename ?? "");
 			const inFlow = noteEdit();
@@ -408,9 +640,6 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		saveState();
 	});
 
-	// --- pi advanced features ----------------------------------------------
-	// agent_start/agent_end fire once per user prompt (not per subagent) — keep them
-	// low-key; real subagent dispatch is detected via the tool_call above.
 	pi.on("agent_start", async () => {
 		setWorkingLine("agent");
 		setMood("working", { message: pick(MESSAGES.working) });
@@ -434,148 +663,206 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		}
 	});
 
-	// --- /pokemon command ---------------------------------------------------
-	pi.registerCommand("pokemon", {
+	pi.registerCommand("pet", {
 		description:
-			"pokemon: list | choose <name> | large [name] | small | nick <n> | feed | awake [reason] | sleep | stats | hide | show",
+			"pet: style ascii|image | list | choose <id> | gallery [query] | install <slug> | large | small | nick <n> | feed | awake [reason] | sleep | stats | hide | show",
 		handler: async (args, ctx) => {
 			ctxRef = ctx;
-			const [cmd, ...rest] = args.trim().split(/\s+/);
+			const [cmd = "", ...rest] = args.trim().split(/\s+/).filter(Boolean);
 			const value = rest.join(" ").trim();
 
-			switch (cmd) {
-				case "list": {
-					const lines = Object.values(MON).map((m) => `${m.name} ${m.tag}  (${m.type})`);
-					return ctx.ui.notify(`Available Pokémon:\n${lines.join("\n")}`, "info");
-				}
-
-				case "choose": {
-					const key = value.toLowerCase();
-					if (!MON[key]) return ctx.ui.notify(`Unknown. Try: ${Object.keys(MON).join(", ")}`, "error");
-					state.monKey = key;
-					state.nick = "";
-					saveState();
-					lastRendered = "";
-					setMood("happy", { message: `I choose you, ${MON[key]?.name}! ✦` });
-					return ctx.ui.notify(`Now partnered with ${MON[key]?.name}`, "info");
-				}
-
-				case "nick":
-					if (!value) return ctx.ui.notify("Usage: /pokemon nick <nickname>", "error");
-					state.nick = value;
-					saveState();
-					render();
-					return ctx.ui.notify(`Nicknamed ${state.nick} ♥`, "info");
-
-				case "feed":
-					addEnergy(30);
-					saveState();
-					setMood("happy", { message: pick(["*nom nom* thank you!", "a berry! best trainer ✦", "*happy wiggle*"]) });
-					return ctx.ui.notify(`Fed ${displayName()} a berry  (energy ${Math.round(state.energy)})`, "info");
-
-				case "large":
-				case "big": {
-					const key = value.toLowerCase();
-					if (key && !MON[key]) return ctx.ui.notify(`Unknown. Try: ${Object.keys(MON).join(", ")}`, "error");
-					if (key && MON[key]) {
-						state.monKey = key;
-						state.nick = "";
+			try {
+				switch (cmd) {
+					case "style": {
+						const style = value.toLowerCase();
+						if (style !== "ascii" && style !== "image") return ctx.ui.notify("Usage: /pet style ascii|image", "error");
+						if (style === "image") {
+							if (!state.imagePetSlug) {
+								const first = listLocalPetdexPets()[0];
+								if (!first)
+									return ctx.ui.notify("No Petdex pets installed. Try /pet install boba or /pet gallery.", "error");
+								state.imagePetSlug = first.slug;
+							}
+							state.style = "image";
+							await ensureImageReady();
+						}
+						state.style = style;
+						state.visible = true;
 						saveState();
-					}
-					state.size = "large";
-					state.visible = true;
-					lastRendered = "";
-					render();
-					const note = hasLargeArt(state.monKey)
-						? `Detailed mode ✦ — ${displayName()} the ${mon().name}  (/pokemon small to shrink)`
-						: `Detailed mode on — no large art for ${mon().name} yet, showing the default. (/pokemon small to shrink)`;
-					return ctx.ui.notify(note, "info");
-				}
-
-				case "small":
-				case "compact":
-					state.size = "small";
-					lastRendered = "";
-					render();
-					return ctx.ui.notify("Back to compact mode. (/pokemon large for detailed art)", "info");
-
-				case "hide":
-					state.visible = false;
-					render();
-					return ctx.ui.notify("Hidden. /pokemon show to bring it back.", "info");
-
-				case "show":
-					state.visible = true;
-					lastRendered = "";
-					render();
-					return ctx.ui.notify("Back! ♥", "info");
-
-				case "awake":
-				case "caffeinate": {
-					const sub = value.toLowerCase();
-					if (sub === "status") {
-						const info = awakeInfo();
-						return ctx.ui.notify(
-							info.active
-								? `Keeping system awake via ${info.method}${info.reason ? ` — “${info.reason}”` : ""}. /pokemon sleep to release.`
-								: "Keep-awake is off.",
-							"info",
-						);
-					}
-					// Anything else (including empty) starts keep-awake, using it as the reason.
-					const reason = sub === "on" ? "" : value;
-					const res = startAwake(reason, (msg) => ctx.ui.notify(`⚠️ ${msg}`, "error"));
-					if (!res.supported) return ctx.ui.notify(`⚠️ Keep-awake isn't supported on ${process.platform}.`, "error");
-					if (!res.ok) return ctx.ui.notify("⚠️ Couldn't start keep-awake (inhibitor failed to launch).", "error");
-					lastRendered = "";
-					setMood("guard", { message: reason ? `on watch: ${reason} ☕` : "on watch — system stays awake ☕" });
-					return ctx.ui.notify(
-						`☕ Your laptop will stay awake${reason ? ` (${reason})` : ""} — sleep is blocked via ${res.method}. Run /pokemon sleep to allow it to sleep again.`,
-						"info",
-					);
-				}
-
-				case "sleep": {
-					if (isAwake()) {
-						stopAwake();
 						lastRendered = "";
-						setMood("sleep", { message: "lock released — nap time 💤" });
+						setMood("happy", { message: style === "image" ? "Petdex image mode online!" : "ASCII mode online!" });
+						return ctx.ui.notify(`Pet style set to ${style}.`, "info");
+					}
+
+					case "list": {
+						if (state.style === "image") {
+							const pets = listLocalPetdexPets();
+							if (pets.length === 0) return ctx.ui.notify("No installed Petdex pets. Try /pet install boba.", "info");
+							return ctx.ui.notify(
+								`Installed Petdex pets:\n${pets.map((pet) => `${pet.slug} - ${pet.metadata.displayName}`).join("\n")}`,
+								"info",
+							);
+						}
+						const lines = Object.values(MON).map((pet) => `${pet.name} ${pet.tag}  (${pet.type})`);
+						return ctx.ui.notify(`Available ASCII pets:\n${lines.join("\n")}`, "info");
+					}
+
+					case "gallery": {
+						const query = value.toLowerCase();
+						const manifest = await fetchPetdexManifest();
+						const pets = manifest.pets
+							.filter(
+								(pet) => !query || `${pet.slug} ${pet.displayName} ${pet.kind ?? ""}`.toLowerCase().includes(query),
+							)
+							.slice(0, 20);
+						if (pets.length === 0) return ctx.ui.notify(`No Petdex gallery pets matched "${value}".`, "info");
+						return ctx.ui.notify(`Petdex gallery:\n${pets.map(formatGalleryPet).join("\n")}`, "info");
+					}
+
+					case "install": {
+						const slug = value.toLowerCase();
+						if (!slug) return ctx.ui.notify("Usage: /pet install <slug>", "error");
+						const pet = await installPetdexPet(slug);
+						state.style = "image";
+						state.nick = "";
+						await activateImagePet(pet.slug);
+						saveState();
+						setMood("happy", { message: `${pet.metadata.displayName} installed! ✦` });
+						return ctx.ui.notify(`Installed and selected ${pet.metadata.displayName}.`, "info");
+					}
+
+					case "choose": {
+						const note = await choosePet(value);
+						return ctx.ui.notify(note, "info");
+					}
+
+					case "nick":
+						if (!value) return ctx.ui.notify("Usage: /pet nick <nickname>", "error");
+						state.nick = value;
+						saveState();
+						render();
+						return ctx.ui.notify(`Nicknamed ${state.nick} ♥`, "info");
+
+					case "feed":
+						addEnergy(30);
+						saveState();
+						setMood("happy", { message: pick(["*nom nom* thank you!", "a berry! best partner ✦", "*happy wiggle*"]) });
+						return ctx.ui.notify(`Fed ${displayName()} a berry (energy ${Math.round(state.energy)})`, "info");
+
+					case "large":
+					case "big": {
+						if (value) {
+							try {
+								await choosePet(value);
+							} catch {
+								return ctx.ui.notify(`Unknown pet. Try /pet list or /pet gallery ${value}`, "error");
+							}
+						}
+						state.size = "large";
+						state.visible = true;
+						if (state.style === "image") await ensureImageReady();
+						saveState();
+						lastRendered = "";
+						render();
+						const note =
+							state.style === "image"
+								? `Large Petdex mode - ${displayName()} (/pet small to shrink)`
+								: hasLargeArt(state.asciiPetKey)
+									? `Detailed ASCII mode - ${displayName()} the ${asciiMon().name} (/pet small to shrink)`
+									: `Detailed ASCII mode on - no large art for ${asciiMon().name} yet.`;
+						return ctx.ui.notify(note, "info");
+					}
+
+					case "small":
+					case "compact":
+						state.size = "small";
+						if (state.style === "image") await ensureImageReady();
+						saveState();
+						lastRendered = "";
+						render();
+						return ctx.ui.notify("Back to compact mode. (/pet large to enlarge)", "info");
+
+					case "hide":
+						state.visible = false;
+						render();
+						return ctx.ui.notify("Hidden. /pet show to bring it back.", "info");
+
+					case "show":
+						state.visible = true;
+						lastRendered = "";
+						render();
+						return ctx.ui.notify("Back! ♥", "info");
+
+					case "awake":
+					case "caffeinate": {
+						const sub = value.toLowerCase();
+						if (sub === "status") {
+							const info = awakeInfo();
+							return ctx.ui.notify(
+								info.active
+									? `Keeping system awake via ${info.method}${info.reason ? ` - "${info.reason}"` : ""}. /pet sleep to release.`
+									: "Keep-awake is off.",
+								"info",
+							);
+						}
+						const reason = sub === "on" ? "" : value;
+						const res = startAwake(reason, (msg) => ctx.ui.notify(`Warning: ${msg}`, "error"));
+						if (!res.supported) return ctx.ui.notify(`Keep-awake isn't supported on ${process.platform}.`, "error");
+						if (!res.ok) return ctx.ui.notify("Couldn't start keep-awake (inhibitor failed to launch).", "error");
+						lastRendered = "";
+						setMood("guard", { message: reason ? `on watch: ${reason}` : "on watch - system stays awake" });
 						return ctx.ui.notify(
-							"💤 Keep-awake released — your laptop can sleep normally again (not forcing sleep now).",
+							`Your laptop will stay awake${reason ? ` (${reason})` : ""} via ${res.method}. Run /pet sleep to allow sleep again.`,
 							"info",
 						);
 					}
-					lastRendered = "";
-					setMood("sleep", { message: pick(MESSAGES.sleep) });
-					return ctx.ui.notify(
-						`💤 Keep-awake wasn't on. ${displayName()} curls up for a nap (your power settings are unchanged).`,
-						"info",
-					);
-				}
 
-				case "stats": {
-					const evs = readEvents();
-					const dayAgo = Date.now() - 86_400_000;
-					const last = evs.filter((e) => e.t >= dayAgo);
-					const n = (t: string) => last.filter((e) => e.type === t).length;
-					const tier = tierOf(state.sessions);
-					const met = new Date(state.firstMet).toISOString().slice(0, 10);
-					const lines = [
-						`${displayName()} the ${mon().name} — ${tier}`,
-						`met ${met} · ${state.sessions} sessions · energy ${Math.round(state.energy)}/100`,
-						`last 24h: ${n("test-pass")} tests pass · ${n("test-fail")} fail · ${n("commit")} commits · ${n("pr")} PRs · ${n("edit")} edits`,
-					];
-					return ctx.ui.notify(lines.join("\n"), "info");
-				}
+					case "sleep": {
+						if (isAwake()) {
+							stopAwake();
+							lastRendered = "";
+							setMood("sleep", { message: "lock released - nap time" });
+							return ctx.ui.notify("Keep-awake released - your laptop can sleep normally again.", "info");
+						}
+						lastRendered = "";
+						setMood("sleep", { message: pick(MESSAGES.sleep) });
+						return ctx.ui.notify(`Keep-awake wasn't on. ${displayName()} curls up for a nap.`, "info");
+					}
 
-				default: {
-					const tier = tierOf(state.sessions);
-					const awake = isAwake() ? " · ☕ awake" : "";
-					return ctx.ui.notify(
-						`${displayName()} the ${mon().name} (${mon().type}) · ${tier} · ${state.sessions} sessions · energy ${Math.round(state.energy)} · mood ${state.mood}${awake}`,
-						"info",
-					);
+					case "stats": {
+						const evs = readEvents();
+						const dayAgo = Date.now() - 86_400_000;
+						const last = evs.filter((event) => event.t >= dayAgo);
+						const n = (type: string) => last.filter((event) => event.type === type).length;
+						const tier = tierOf(state.sessions);
+						const met = new Date(state.firstMet).toISOString().slice(0, 10);
+						const petLine =
+							state.style === "image"
+								? `${displayName()} (${state.imagePetSlug || "Petdex"}) - ${tier}`
+								: `${displayName()} the ${asciiMon().name} - ${tier}`;
+						const lines = [
+							petLine,
+							`style ${state.style} - met ${met} - ${state.sessions} sessions - energy ${Math.round(state.energy)}/100`,
+							`last 24h: ${n("test-pass")} tests pass - ${n("test-fail")} fail - ${n("commit")} commits - ${n("pr")} PRs - ${n("edit")} edits`,
+						];
+						return ctx.ui.notify(lines.join("\n"), "info");
+					}
+
+					default: {
+						const tier = tierOf(state.sessions);
+						const awake = isAwake() ? " - awake" : "";
+						const identity =
+							state.style === "image"
+								? `${displayName()} (${state.imagePetSlug || "Petdex"})`
+								: `${displayName()} the ${asciiMon().name} (${asciiMon().type})`;
+						return ctx.ui.notify(
+							`${identity} - ${state.style} - ${tier} - ${state.sessions} sessions - energy ${Math.round(state.energy)} - mood ${state.mood}${awake}`,
+							"info",
+						);
+					}
 				}
+			} catch (err) {
+				return ctx.ui.notify(err instanceof Error ? err.message : "Pet command failed.", "error");
 			}
 		},
 	});
