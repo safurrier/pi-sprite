@@ -35,7 +35,7 @@ pi -e npm:pi-pokepet
 /pet list                    list pets for the active style
 /pet choose <id>             choose an installed Petdex pet or ASCII pet
 /pet gallery [query]         search the public Petdex gallery
-/pet install <slug>          download and select a Petdex gallery pet
+/pet install <slug>          download and select a Petdex / codex-pets gallery pet
 /pet nick <nickname>         give it a nickname
 /pet feed                    restore energy
 /pet awake [reason]          keep your system from sleeping
