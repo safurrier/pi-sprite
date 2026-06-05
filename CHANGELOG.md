@@ -1,12 +1,13 @@
 # Changelog
 
-## 1.6.1 - Electron Companion, Personalities, & Smart Notifications
+## 1.6.2 - Electron Companion, Personalities, & Smart Notifications
 
 - Added a transparent premium Electron companion window with a floating glassmorphic speech bubble for image style pets.
 - Implemented deterministic buddy personality stats (Chaos, Curiosity, Snark) and rarity tiers (Common, Rare, Legendary) calculated from slug and nickname.
 - Added smart task notifications (red/green glowing speech bubble and custom states) for build and test completions/failures.
 - Added fallback installation of community pets using `npx -y codex-pets add <slug>`.
 - Added `/pet uninstall <slug>` command to delete an installed pet and its assets from disk.
+- Added `npx pi-pets add <slug>` and `npx pi-pokepet add <slug>` command-line binaries to download and install pets directly from the terminal.
 - Fully integrated all 9 spritesheet animation states (idle, runRight, runLeft, wave, jump, failed, waiting, running, review).
 - Implemented low energy click reaction (sad/flat failed animation and frantic vertical bounce with hurting quotes).
 - Resolved global manifest cache pollution bug during testing by isolating `MANIFEST_CACHE_FILE` to `PI_POKEPET_PETDEX_DIR` when set.

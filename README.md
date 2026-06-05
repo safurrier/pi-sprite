@@ -67,6 +67,13 @@ Install one directly from the Petdex gallery:
 /pet install boba
 ```
 
+Or install any Petdex/Codex pet directly from your system command-line terminal:
+
+```bash
+npx pi-pets add boba
+# or: npx pi-pokepet add boba
+```
+
 Then select it in pi:
 
 ```text
