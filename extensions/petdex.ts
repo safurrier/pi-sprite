@@ -7,7 +7,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, extname, isAbsolute, join, normalize, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, normalize, resolve, sep } from "node:path";
 
 export const PETDEX_MANIFEST_URL = "https://petdex.crafter.run/api/manifest";
 export const PETDEX_PETS_DIR = process.env.PI_POKEPET_PETDEX_DIR || join(homedir(), ".codex", "pets");
@@ -106,15 +106,40 @@ export function listLocalPetdexPets(): PetdexPet[] {
 		.sort((a, b) => a.metadata.displayName.localeCompare(b.metadata.displayName));
 }
 
+const MANIFEST_CACHE_FILE = process.env.PI_POKEPET_PETDEX_DIR
+	? join(process.env.PI_POKEPET_PETDEX_DIR, "pokepet-manifest.json")
+	: join(homedir(), ".pi", "agent", "pokepet-manifest.json");
+
 export async function fetchPetdexManifest(): Promise<PetdexManifest> {
-	const res = await fetch(PETDEX_MANIFEST_URL, { headers: { accept: "application/json" } });
-	if (!res.ok) throw new Error(`manifest fetch failed (${res.status})`);
-	const data = (await res.json()) as unknown;
-	if (!isRecord(data) || !Array.isArray(data.pets)) throw new Error("manifest response is invalid");
+	let rawData: unknown;
+	try {
+		const res = await fetch(PETDEX_MANIFEST_URL, { headers: { accept: "application/json" } });
+		if (!res.ok) throw new Error(`manifest fetch failed (${res.status})`);
+		rawData = (await res.json()) as unknown;
+
+		try {
+			mkdirSync(dirname(MANIFEST_CACHE_FILE), { recursive: true });
+			writeFileSync(MANIFEST_CACHE_FILE, JSON.stringify(rawData, null, 2));
+		} catch {
+			// ignore cache write errors
+		}
+	} catch (err) {
+		if (existsSync(MANIFEST_CACHE_FILE)) {
+			try {
+				rawData = JSON.parse(readFileSync(MANIFEST_CACHE_FILE, "utf8"));
+			} catch {
+				throw err;
+			}
+		} else {
+			throw err;
+		}
+	}
+
+	if (!isRecord(rawData) || !Array.isArray(rawData.pets)) throw new Error("manifest response is invalid");
 	return {
-		generatedAt: cleanString(data.generatedAt) || undefined,
-		total: typeof data.total === "number" ? data.total : data.pets.length,
-		pets: data.pets
+		generatedAt: cleanString(rawData.generatedAt) || undefined,
+		total: typeof rawData.total === "number" ? rawData.total : rawData.pets.length,
+		pets: rawData.pets
 			.filter(isRecord)
 			.map((pet) => ({
 				slug: cleanString(pet.slug),
@@ -146,7 +171,39 @@ async function downloadBytes(url: string): Promise<{ bytes: Buffer; contentType:
 export async function installPetdexPet(slug: string): Promise<PetdexPet> {
 	const manifest = await fetchPetdexManifest();
 	const entry = manifest.pets.find((pet) => pet.slug === slug);
-	if (!entry) throw new Error(`Petdex pet not found: ${slug}`);
+	if (!entry) {
+		console.log(
+			`[pi-pokepet] Pet "${slug}" not found in Petdex manifest. Trying community CLI install via npx codex-pets...`,
+		);
+		try {
+			const { execSync } = await import("node:child_process");
+			execSync(`npx -y codex-pets add ${slug}`, { stdio: "ignore" });
+
+			const defaultPetsDir = join(homedir(), ".codex", "pets", slug);
+			if (process.env.PI_POKEPET_PETDEX_DIR && existsSync(defaultPetsDir)) {
+				const destDir = join(process.env.PI_POKEPET_PETDEX_DIR, slug);
+				mkdirSync(destDir, { recursive: true });
+				const petJson = readFileSync(join(defaultPetsDir, "pet.json"));
+				writeFileSync(join(destDir, "pet.json"), petJson);
+
+				const meta = JSON.parse(petJson.toString("utf8"));
+				const spritePath = meta.spritesheetPath || "spritesheet.png";
+				if (existsSync(join(defaultPetsDir, spritePath))) {
+					writeFileSync(join(destDir, spritePath), readFileSync(join(defaultPetsDir, spritePath)));
+				} else if (existsSync(join(defaultPetsDir, "spritesheet.webp"))) {
+					writeFileSync(join(destDir, "spritesheet.webp"), readFileSync(join(defaultPetsDir, "spritesheet.webp")));
+				}
+			}
+		} catch (err) {
+			throw new Error(
+				`Failed to install pet "${slug}" via community CLI: ${err instanceof Error ? err.message : String(err)}`,
+			);
+		}
+
+		const pet = loadLocalPetdexPet(slug);
+		if (!pet) throw new Error(`Installed pet "${slug}" via community CLI, but local validation failed`);
+		return pet;
+	}
 
 	const [petJsonRes, spriteRes] = await Promise.all([
 		downloadBytes(entry.petJsonUrl),

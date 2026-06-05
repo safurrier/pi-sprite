@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>pi-pokepet</title>
+  <style>
+    :root {
+      --bg-glass: rgba(18, 18, 24, 0.85);
+      --border-glass: rgba(255, 255, 255, 0.08);
+      --fg-color: #f1f1f7;
+      --fg-dim: #9ba1b6;
+      --accent-heart: #ff4a70;
+      --accent-gold: #ffb830;
+      --accent-emerald: #10b981;
+      --accent-sky: #38bdf8;
+      --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background: transparent;
+      color: var(--fg-color);
+      font-family: var(--font-stack);
+      width: 200px;
+      height: 200px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
+      position: relative;
+      -webkit-app-region: drag;
+    }
+
+    /* Container for the pet canvas */
+    #pet-container {
+      width: 80px;
+      height: 80px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: absolute;
+      bottom: 15px;
+      cursor: grab;
+      -webkit-app-region: drag; /* Draggable area */
+      transition: transform 0.1s ease;
+    }
+
+    #pet-container:active {
+      cursor: grabbing;
+    }
+
+    #pet-canvas {
+      width: 80px;
+      height: 80px;
+      image-rendering: pixelated;
+      -webkit-app-region: no-drag;
+      cursor: pointer;
+    }
+
+    /* Drag indicator when hovering over pet */
+    #pet-container::after {
+      content: '⤭';
+      position: absolute;
+      top: -12px;
+      font-size: 10px;
+      color: var(--fg-dim);
+      background: var(--bg-glass);
+      border: 1px solid var(--border-glass);
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    #pet-container:hover::after {
+      opacity: 1;
+    }
+
+    /* Speech Bubble Styling */
+    #speech-bubble {
+      position: absolute;
+      bottom: 85px;
+      left: 50%;
+      width: max-content;
+      max-width: 140px;
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      border-radius: 10px;
+      padding: 6px 10px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      opacity: 0;
+      transform: translateX(-50%) translateY(10px) scale(0.8);
+      transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1), 
+                  transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    #speech-bubble.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0) scale(1);
+      animation: bubble-bob 3s ease-in-out infinite;
+    }
+
+    .bubble-text {
+      font-size: 10px;
+      line-height: 1.3;
+      color: var(--fg-color);
+      text-align: center;
+      word-break: break-word;
+      font-weight: 500;
+    }
+
+    .bubble-arrow {
+      position: absolute;
+      bottom: -5px;
+      left: 50%;
+      transform: translateX(-50%) rotate(45deg);
+      width: 8px;
+      height: 8px;
+      background: var(--bg-glass);
+      border-right: 1px solid var(--border-glass);
+      border-bottom: 1px solid var(--border-glass);
+    }
+
+    #speech-bubble.success {
+      border-color: rgba(16, 185, 129, 0.4);
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.25);
+    }
+    
+    #speech-bubble.success .bubble-text {
+      color: #34d399;
+    }
+
+    #speech-bubble.success .bubble-arrow {
+      border-right-color: rgba(16, 185, 129, 0.4);
+      border-bottom-color: rgba(16, 185, 129, 0.4);
+    }
+
+    #speech-bubble.error {
+      border-color: rgba(239, 68, 68, 0.4);
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.25);
+    }
+
+    #speech-bubble.error .bubble-text {
+      color: #f87171;
+    }
+
+    #speech-bubble.error .bubble-arrow {
+      border-right-color: rgba(239, 68, 68, 0.4);
+      border-bottom-color: rgba(239, 68, 68, 0.4);
+    }
+
+    @keyframes bubble-bob {
+      0%, 100% {
+        transform: translateX(-50%) translateY(0) scale(1);
+      }
+      50% {
+        transform: translateX(-50%) translateY(-4px) scale(1);
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Hover Card -->
+
+
+  <!-- The Animated Pet -->
+  <div id="pet-container">
+    <div id="speech-bubble">
+      <div class="bubble-text" id="bubble-text">Hello!</div>
+      <div class="bubble-arrow"></div>
+    </div>
+    <canvas id="pet-canvas" width="64" height="64"></canvas>
+  </div>
+
+  <!-- Main Renderer Logic -->
+  <script src="renderer.js"></script>
+</body>
+</html>

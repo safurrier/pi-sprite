@@ -156,3 +156,39 @@ export function greeting(tier: Tier, sessions: number, mon: Mon): string {
 			return `a wild ${mon.name} appeared!`;
 	}
 }
+
+export interface PetPersonality {
+	tier: "Common" | "Rare" | "Legendary";
+	chaos: number;
+	curiosity: number;
+	snark: number;
+}
+
+function hashString(str: string): number {
+	let hash = 0;
+	for (let i = 0; i < str.length; i++) {
+		hash = (hash << 5) - hash + str.charCodeAt(i);
+		hash |= 0; // Convert to 32bit integer
+	}
+	return Math.abs(hash);
+}
+
+export function getPetPersonality(slug: string, nick?: string): PetPersonality {
+	const source = `${slug}:${nick ?? ""}`;
+	const hash = hashString(source);
+
+	const tierVal = hash % 100;
+	let tier: "Common" | "Rare" | "Legendary" = "Common";
+	if (tierVal >= 90) tier = "Legendary";
+	else if (tierVal >= 60) tier = "Rare";
+
+	const minVal = tier === "Legendary" ? 70 : tier === "Rare" ? 40 : 10;
+	const maxVal = tier === "Legendary" ? 100 : tier === "Rare" ? 85 : 60;
+	const range = maxVal - minVal;
+
+	const chaos = minVal + ((hash >> 2) % range);
+	const curiosity = minVal + ((hash >> 4) % range);
+	const snark = minVal + ((hash >> 6) % range);
+
+	return { tier, chaos, curiosity, snark };
+}

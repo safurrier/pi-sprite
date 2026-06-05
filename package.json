@@ -1,6 +1,6 @@
 {
 	"name": "pi-pokepet",
-	"version": "1.6.0",
+	"version": "1.6.1",
 	"description": "A cute, colorful pet companion for the pi coding agent. Use classic ASCII pets or Petdex image pets that live below your editor and react to tools, tests, commits, PRs, reviews, subagents, model swaps and more.",
 	"keywords": [
 		"pi-package",
@@ -42,6 +42,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.16",
+		"electron": "^42.3.3",
 		"tsx": "^4.22.3"
 	},
 	"files": [

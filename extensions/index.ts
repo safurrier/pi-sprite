@@ -6,11 +6,11 @@
  * `style image`.
  */
 
-import { type ChildProcess, spawn } from "node:child_process";
-import { basename } from "node:path";
+import { type ChildProcess, execSync, spawn } from "node:child_process";
+import { existsSync, rmSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { allocateImageId } from "@earendil-works/pi-tui";
-import { bar, c, dim, NO_COLOR } from "./colors.ts";
+import { bar, c, dim } from "./colors.ts";
 import {
 	CELEBRATORY,
 	detectIntent,
@@ -27,37 +27,46 @@ import {
 	timeBucket,
 	workingMessage,
 } from "./content.ts";
+import {
+	broadcastState,
+	getManagerStatus,
+	launchElectron,
+	startElectronManager,
+	stopElectron,
+	stopElectronManager,
+} from "./electron-manager.ts";
 import { buildFrame, MON, MOOD_COLOR, type Mon, type Mood } from "./mons.ts";
 import {
 	fetchPetdexManifest,
 	installPetdexPet,
 	listLocalPetdexPets,
 	loadLocalPetdexPet,
+	PETDEX_PETS_DIR,
 	type PetdexManifestPet,
 	type PetdexPet,
 } from "./petdex.ts";
-import { getNativePetdexFrame, type NativeRenderedPet, prepareNativePetdexPet } from "./petdex-native-renderer.ts";
-import type { RenderedPet } from "./petdex-renderer.ts";
-import { getRenderedPetFrame, renderPetdexPetForColumns, visibleWidth } from "./petdex-renderer.ts";
-import { buildNativePetWidget, buildTextPetWidget, supportsNativeImagePets } from "./petdex-widget.ts";
-import { buildLargeFrame, hasLargeArt } from "./sprites.ts";
-import { applySavedState, greeting, loadSaved, logEvent, readEvents, saveState, state, tierOf } from "./state.ts";
+import { buildTextPetWidget } from "./petdex-widget.ts";
+import {
+	applySavedState,
+	getPetPersonality,
+	greeting,
+	loadSaved,
+	logEvent,
+	readEvents,
+	saveState,
+	state,
+	tierOf,
+} from "./state.ts";
 
 let ctxRef: ExtensionContext | undefined;
 let animTimer: ReturnType<typeof setInterval> | null = null;
 let lastRendered = "";
 let lastEnergyTick = Date.now();
-let imageFallbackNotified = false;
 let activeImagePet: PetdexPet | undefined;
-let activeImageRender: RenderedPet | undefined;
-let activeNativeImageRender: NativeRenderedPet | undefined;
-let imageRenderRefresh: Promise<void> | undefined;
-const nativeImageId = allocateImageId();
 
 const MAX_WIDGET_COLUMNS = 72;
 const MIN_WIDGET_COLUMNS = 24;
 const WIDGET_MARGIN_COLUMNS = 4;
-const STATUS_ROWS = 3;
 
 // ---------------------------------------------------------------------------
 // Keep-awake (system sleep inhibitor)
@@ -151,19 +160,6 @@ function widgetColumns(): number {
 	return Math.max(MIN_WIDGET_COLUMNS, Math.min(MAX_WIDGET_COLUMNS, terminalColumns - WIDGET_MARGIN_COLUMNS));
 }
 
-function widgetArtRows(): number {
-	const terminalRows = process.stdout.rows || 24;
-	const modeRows = state.style === "image" ? (state.size === "large" ? 18 : 12) : state.size === "large" ? 16 : 8;
-	return Math.max(4, Math.min(modeRows, terminalRows - STATUS_ROWS - 4));
-}
-
-function activeImageBackend(): "native" | "ansi" | "ascii" {
-	if (state.style !== "image") return "ascii";
-	if (supportsNativeImagePets()) return "native";
-	if (NO_COLOR) return "ascii";
-	return "ansi";
-}
-
 function wrapPlain(text: string, maxColumns: number): string[] {
 	const clean = text.replace(/\s+/g, " ").trim();
 	if (!clean) return [""];
@@ -229,133 +225,37 @@ async function activateImagePet(slug: string): Promise<PetdexPet> {
 	const pet = loadLocalPetdexPet(slug);
 	if (!pet) throw new Error(`No installed Petdex pet named ${slug}. Try /pet install ${slug}`);
 	activeImagePet = pet;
-	if (activeImageBackend() === "native") {
-		activeNativeImageRender = await prepareNativePetdexPet(pet);
-		activeImageRender = undefined;
-	} else if (activeImageBackend() === "ansi") {
-		activeImageRender = await renderPetdexPetForColumns(pet, state.size, widgetColumns(), widgetArtRows());
-		activeNativeImageRender = undefined;
-	} else {
-		activeImageRender = undefined;
-		activeNativeImageRender = undefined;
-	}
 	state.imagePetSlug = pet.slug;
-	imageFallbackNotified = false;
 	lastRendered = "";
 	return pet;
 }
 
 async function ensureImageReady(): Promise<void> {
 	if (state.style !== "image" || !state.imagePetSlug) return;
-	const backend = activeImageBackend();
-	if (backend === "ascii") {
-		if (activeImagePet?.slug !== state.imagePetSlug)
-			activeImagePet = loadLocalPetdexPet(state.imagePetSlug) ?? undefined;
-		return;
+	if (activeImagePet?.slug !== state.imagePetSlug) {
+		await activateImagePet(state.imagePetSlug);
 	}
-	if (
-		backend === "native" &&
-		activeImagePet?.slug === state.imagePetSlug &&
-		activeNativeImageRender?.slug === state.imagePetSlug
-	) {
-		return;
-	}
-	if (
-		backend === "ansi" &&
-		activeImagePet?.slug === state.imagePetSlug &&
-		activeImageRender?.slug === state.imagePetSlug &&
-		activeImageRender.size === state.size &&
-		activeImageRender.maxColumns === widgetColumns() &&
-		activeImageRender.maxRows === widgetArtRows()
-	) {
-		return;
-	}
-	await activateImagePet(state.imagePetSlug);
 }
 
-function refreshImageRender(): void {
-	if (imageRenderRefresh || state.style !== "image" || !state.imagePetSlug) return;
-	imageRenderRefresh = ensureImageReady()
-		.catch(() => {
-			activeImageRender = undefined;
-			activeNativeImageRender = undefined;
-		})
-		.finally(() => {
-			imageRenderRefresh = undefined;
-			lastRendered = "";
-			render();
-		});
-}
-
-function renderAsciiFrame(maxColumns: number, maxRows: number): string[] {
+function renderAsciiFrame(): string[] {
 	const m = asciiMon();
 	const frameIdx = Math.floor(state.frameIdx / 3);
 	const frameOpts = { lively: state.energy > 60, weak: state.energy < 15 };
-	let frame =
-		state.size === "large"
-			? buildLargeFrame(state.asciiPetKey, m, state.mood, frameIdx, frameOpts)
-			: buildFrame(m, state.mood, frameIdx, frameOpts);
-	if (frame.length > maxRows || frame.some((line) => visibleWidth(line) > maxColumns)) {
-		frame = buildFrame(m, state.mood, frameIdx, frameOpts);
-	}
+	const frame = buildFrame(m, state.mood, frameIdx, frameOpts);
 	const bodyColor = MOOD_COLOR[state.mood] ?? m.color;
 	return frame.map((line) => c(bodyColor, line));
-}
-
-function renderImageFrame(maxColumns: number, maxRows: number): string[] | undefined {
-	if (!activeImageRender || activeImageRender.slug !== state.imagePetSlug || activeImageRender.size !== state.size) {
-		refreshImageRender();
-		return undefined;
-	}
-	if (activeImageRender.maxColumns > maxColumns) {
-		refreshImageRender();
-		return undefined;
-	}
-	if (activeImageRender.maxRows > maxRows) {
-		refreshImageRender();
-		return undefined;
-	}
-	if (activeImageRender.maxColumns < maxColumns || activeImageRender.maxRows < maxRows) refreshImageRender();
-	return getRenderedPetFrame(activeImageRender, state.mood, state.frameIdx, state.lastIntent);
-}
-
-function renderNativeImageFrame() {
-	if (!activeNativeImageRender || activeNativeImageRender.slug !== state.imagePetSlug) {
-		refreshImageRender();
-		return undefined;
-	}
-	return getNativePetdexFrame(activeNativeImageRender, state.mood, state.frameIdx, state.lastIntent);
 }
 
 function render(): void {
 	if (!ctxRef?.hasUI) return;
 	if (!state.visible) {
 		ctxRef.ui.setWidget("pokepet", undefined);
+		stopElectron();
 		return;
 	}
 
-	const backend = activeImageBackend();
-	if (state.style === "image" && backend === "ascii" && NO_COLOR && !imageFallbackNotified) {
-		imageFallbackNotified = true;
-		ctxRef.ui.notify(
-			"NO_COLOR is set and native terminal images are unavailable, so Petdex pets are falling back to ASCII.",
-			"info",
-		);
-	}
-
-	if (state.style === "image" && backend !== "native" && activeNativeImageRender) {
-		activeNativeImageRender = undefined;
-	}
-	if (state.style === "image" && backend !== "ansi" && activeImageRender) {
-		activeImageRender = undefined;
-	}
-
 	const maxColumns = widgetColumns();
-	const maxRows = widgetArtRows();
 	const m = asciiMon();
-	const nativeFrame = backend === "native" ? renderNativeImageFrame() : undefined;
-	const imageFrame = backend === "ansi" ? renderImageFrame(maxColumns, maxRows) : undefined;
-	const lines = nativeFrame ? [] : imageFrame?.length ? [...imageFrame] : renderAsciiFrame(maxColumns, maxRows);
 	const messageColor =
 		state.mood === "working" || state.mood === "thinking"
 			? 226
@@ -364,43 +264,37 @@ function render(): void {
 				: state.mood === "happy"
 					? 84
 					: 250;
-	const nameColor = state.style === "image" && backend !== "ascii" ? 117 : m.color;
-	const tag = state.style === "image" && backend !== "ascii" ? "Petdex" : m.tag;
-	const status = statusLines(nameColor, tag, messageColor, maxColumns);
-	const meter = dim(`${c(203, "\u2665")}${bar(state.energy)} ${Math.round(state.energy)}`);
 
-	if (nativeFrame) {
-		const signature = [
-			"native",
-			state.size,
-			nativeFrame.filename,
-			state.mood,
-			state.message,
-			Math.round(state.energy),
-			process.stdout.rows || 24,
-		].join("\n");
+	if (state.style === "image") {
+		// Launch Electron if not running
+		launchElectron();
+		// Broadcast state changes
+		broadcastState();
+
+		const nameColor = 117;
+		const tag = "Petdex";
+		const status = statusLines(nameColor, tag, messageColor, maxColumns);
+		const meter = dim(`${c(203, "\u2665")}${bar(state.energy)} ${Math.round(state.energy)}`);
+
+		const lines = [...status, meter];
+		const signature = ["text:electron", ...lines].join("\n");
 		if (signature === lastRendered) return;
 		lastRendered = signature;
-		ctxRef.ui.setWidget(
-			"pokepet",
-			() =>
-				buildNativePetWidget({
-					frame: nativeFrame,
-					imageId: nativeImageId,
-					size: state.size,
-					statusLines: status,
-					meterLine: meter,
-					terminalRows: process.stdout.rows || 24,
-				}),
-			{ placement: "belowEditor" },
-		);
+		ctxRef.ui.setWidget("pokepet", () => buildTextPetWidget({ lines }), { placement: "belowEditor" });
 		return;
 	}
+
+	// ASCII path
+	const lines = renderAsciiFrame();
+	const nameColor = m.color;
+	const tag = m.tag;
+	const status = statusLines(nameColor, tag, messageColor, maxColumns);
+	const meter = dim(`${c(203, "\u2665")}${bar(state.energy)} ${Math.round(state.energy)}`);
 
 	lines.push(...status);
 	lines.push(meter);
 
-	const signature = [`text:${backend}`, ...lines].join("\n");
+	const signature = ["text:ascii", ...lines].join("\n");
 	if (signature === lastRendered) return;
 	lastRendered = signature;
 	ctxRef.ui.setWidget("pokepet", () => buildTextPetWidget({ lines }), { placement: "belowEditor" });
@@ -423,7 +317,7 @@ function tick(): void {
 		setMood("idle");
 		return;
 	}
-	if (state.mood === "idle" && since > 8_000) {
+	if (state.mood === "idle" && since > 8_000 && isAwake()) {
 		setMood("guard");
 		return;
 	}
@@ -443,6 +337,40 @@ function noteEdit(): boolean {
 	state.editTimes = state.editTimes.filter((t) => now - t < 20_000);
 	state.editTimes.push(now);
 	return state.editTimes.length >= 4;
+}
+
+function getSystemProcesses(query?: string): { pid: number; name: string }[] {
+	try {
+		const output = execSync("ps -ax -o pid,comm", { encoding: "utf8" });
+		const lines = output.split("\n").slice(1); // skip header
+		const results: { pid: number; name: string }[] = [];
+		const normalizedQuery = query?.toLowerCase();
+
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (!trimmed) continue;
+
+			// split by first whitespace to get PID and Command Path
+			const match = trimmed.match(/^(\d+)\s+(.+)$/);
+			if (!match) continue;
+
+			const pid = Number.parseInt(match[1]!, 10);
+			const fullPath = match[2]!;
+			const name = basename(fullPath);
+
+			if (normalizedQuery) {
+				if (name.toLowerCase().includes(normalizedQuery) || fullPath.toLowerCase().includes(normalizedQuery)) {
+					results.push({ pid, name });
+				}
+			} else {
+				results.push({ pid, name });
+			}
+		}
+		return results;
+	} catch (err) {
+		console.error("Failed to fetch system processes:", err);
+		return [];
+	}
 }
 
 const BALL = ["◓", "◑", "◒", "●"].map((f) => c(196, f));
@@ -498,6 +426,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			}
 		}
 
+		startElectronManager();
 		saveState();
 		logEvent("session-start");
 
@@ -571,7 +500,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		if (/diff|review|pull_request|\bpr_|get_diff/i.test(tool)) {
 			state.lastIntent = "review";
 			setWorkingLine("review");
-			return setMood("working", { message: INTENT_RUN.review });
+			return setMood("thinking", { message: INTENT_RUN.review });
 		}
 
 		if (/^(write|edit|str_replace|create|apply_patch|multi_edit)/.test(tool)) {
@@ -591,7 +520,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			const intent = detectIntent(String(input.command ?? ""));
 			state.lastIntent = intent;
 			setWorkingLine("working", intent ? INTENT_RUN[intent] : undefined);
-			return setMood("working", { message: intent ? INTENT_RUN[intent] : pick(MESSAGES.working) });
+			return setMood("running", { message: intent ? INTENT_RUN[intent] : pick(MESSAGES.working) });
 		}
 
 		if (/^(read|grep|glob|ls|find|search)/.test(tool)) {
@@ -614,8 +543,19 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			state.failStreak++;
 			if (intent === "test") logEvent("test-fail");
 			if (intent === "build") logEvent("build-fail");
-			const msg =
-				state.failStreak >= 3 ? "hang in there! *warm hug*" : intent ? pick(INTENT_FAIL[intent]) : pick(MESSAGES.panic);
+			let msg: string;
+			if (intent === "build") {
+				msg = "Build failed! ❌";
+			} else if (intent === "test") {
+				msg = "Tests failed! ❌";
+			} else {
+				msg =
+					state.failStreak >= 3
+						? "hang in there! *warm hug*"
+						: intent
+							? pick(INTENT_FAIL[intent])
+							: pick(MESSAGES.panic);
+			}
 			setMood("panic", { message: msg });
 		} else {
 			const recovered = state.failStreak >= 2;
@@ -624,8 +564,16 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			if (intent === "commit") logEvent("commit");
 			if (intent === "pr") logEvent("pr");
 			if (intent === "review") logEvent("review");
-			if (recovered) setMood("happy", { message: "redemption arc complete! ✦" });
-			else if (intent && CELEBRATORY.has(intent)) {
+
+			if (intent === "build") {
+				addEnergy(2);
+				setMood("happy", { message: "Build complete! ✦" });
+			} else if (intent === "test") {
+				addEnergy(2);
+				setMood("happy", { message: "Tests passed! 🎉" });
+			} else if (recovered) {
+				setMood("happy", { message: "redemption arc complete! ✦" });
+			} else if (intent && CELEBRATORY.has(intent)) {
 				addEnergy(2);
 				setMood("happy", { message: pick(INTENT_OK[intent]) });
 			}
@@ -657,6 +605,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 		saveState();
 		clearWorkingLine();
 		stopAwake();
+		stopElectronManager();
 		if (animTimer) {
 			clearInterval(animTimer);
 			animTimer = null;
@@ -665,7 +614,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 
 	pi.registerCommand("pet", {
 		description:
-			"pet: style ascii|image | list | choose <id> | gallery [query] | install <slug> | large | small | nick <n> | feed | awake [reason] | sleep | stats | hide | show",
+			"pet: style ascii|image | list | choose <id> | gallery [query] | install <slug> | uninstall <slug> | nick <n> | feed | awake [reason] | sleep | stats | status | ps | kill [pid] | hide | show | help",
 		handler: async (args, ctx) => {
 			ctxRef = ctx;
 			const [cmd = "", ...rest] = args.trim().split(/\s+/).filter(Boolean);
@@ -673,6 +622,29 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 
 			try {
 				switch (cmd) {
+					case "help": {
+						const helpLines = [
+							"Available commands:",
+							"  /pet style ascii|image  - Switch rendering style",
+							"  /pet list               - List installed pets for active style",
+							"  /pet choose <id>        - Partner with an ASCII pet or installed Petdex pet",
+							"  /pet gallery [query]    - Search public Petdex gallery",
+							"  /pet install <slug>     - Download and choose a Petdex pet",
+							"  /pet uninstall <slug>   - Uninstall and delete a Petdex pet from disk",
+							"  /pet nick <nickname>    - Set custom nickname",
+							"  /pet feed               - Feed your pet to restore energy",
+							"  /pet awake [reason]     - Keep system awake",
+							"  /pet sleep              - Allow system to sleep / put pet to sleep",
+							"  /pet stats              - View productivity stats",
+							"  /pet status             - Show current server and companion status",
+							"  /pet ps | processes     - List names and PIDs of active processes",
+							"  /pet kill [pid]         - Terminate Electron companion or a specific PID",
+							"  /pet hide | show        - Hide or show the status widget",
+							"  /pet help               - Show this help list",
+						];
+						return ctx.ui.notify(helpLines.join("\n"), "info");
+					}
+
 					case "style": {
 						const style = value.toLowerCase();
 						if (style !== "ascii" && style !== "image") return ctx.ui.notify("Usage: /pet style ascii|image", "error");
@@ -685,6 +657,9 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 							}
 							state.style = "image";
 							await ensureImageReady();
+							launchElectron();
+						} else if (style === "ascii") {
+							stopElectron();
 						}
 						state.style = style;
 						state.visible = true;
@@ -731,6 +706,38 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 						return ctx.ui.notify(`Installed and selected ${pet.metadata.displayName}.`, "info");
 					}
 
+					case "uninstall":
+					case "remove":
+					case "delete": {
+						const slug = value.toLowerCase();
+						if (!slug) return ctx.ui.notify("Usage: /pet uninstall <slug>", "error");
+
+						const targetDir = join(PETDEX_PETS_DIR, slug);
+						if (!existsSync(targetDir)) {
+							return ctx.ui.notify(`Pet "${slug}" is not installed.`, "error");
+						}
+
+						rmSync(targetDir, { recursive: true, force: true });
+
+						if (state.imagePetSlug === slug) {
+							const pets = listLocalPetdexPets();
+							if (pets.length > 0) {
+								state.imagePetSlug = pets[0].slug;
+								await activateImagePet(state.imagePetSlug);
+							} else {
+								state.imagePetSlug = "";
+								state.style = "ascii";
+								state.asciiPetKey = "pikachu";
+								stopElectron();
+							}
+							saveState();
+							lastRendered = "";
+						}
+
+						setMood("happy", { message: `Uninstalled ${slug}!` });
+						return ctx.ui.notify(`Successfully uninstalled and deleted "${slug}" from disk.`, "info");
+					}
+
 					case "choose": {
 						const note = await choosePet(value);
 						return ctx.ui.notify(note, "info");
@@ -748,39 +755,6 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 						saveState();
 						setMood("happy", { message: pick(["*nom nom* thank you!", "a berry! best partner ✦", "*happy wiggle*"]) });
 						return ctx.ui.notify(`Fed ${displayName()} a berry (energy ${Math.round(state.energy)})`, "info");
-
-					case "large":
-					case "big": {
-						if (value) {
-							try {
-								await choosePet(value);
-							} catch {
-								return ctx.ui.notify(`Unknown pet. Try /pet list or /pet gallery ${value}`, "error");
-							}
-						}
-						state.size = "large";
-						state.visible = true;
-						if (state.style === "image") await ensureImageReady();
-						saveState();
-						lastRendered = "";
-						render();
-						const note =
-							state.style === "image"
-								? `Large Petdex mode - ${displayName()} (/pet small to shrink)`
-								: hasLargeArt(state.asciiPetKey)
-									? `Detailed ASCII mode - ${displayName()} the ${asciiMon().name} (/pet small to shrink)`
-									: `Detailed ASCII mode on - no large art for ${asciiMon().name} yet.`;
-						return ctx.ui.notify(note, "info");
-					}
-
-					case "small":
-					case "compact":
-						state.size = "small";
-						if (state.style === "image") await ensureImageReady();
-						saveState();
-						lastRendered = "";
-						render();
-						return ctx.ui.notify("Back to compact mode. (/pet large to enlarge)", "info");
 
 					case "hide":
 						state.visible = false;
@@ -834,18 +808,110 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 						const dayAgo = Date.now() - 86_400_000;
 						const last = evs.filter((event) => event.t >= dayAgo);
 						const n = (type: string) => last.filter((event) => event.type === type).length;
-						const tier = tierOf(state.sessions);
+						const id = state.style === "image" ? state.imagePetSlug || "Petdex" : state.asciiPetKey;
+						const pers = getPetPersonality(id, state.nick);
 						const met = new Date(state.firstMet).toISOString().slice(0, 10);
 						const petLine =
 							state.style === "image"
-								? `${displayName()} (${state.imagePetSlug || "Petdex"}) - ${tier}`
-								: `${displayName()} the ${asciiMon().name} - ${tier}`;
+								? `${displayName()} (${state.imagePetSlug || "Petdex"})`
+								: `${displayName()} the ${asciiMon().name}`;
 						const lines = [
-							petLine,
+							`${petLine} - ${pers.tier} Companion`,
+							`Personality: Chaos ${pers.chaos}% | Curiosity ${pers.curiosity}% | Snark ${pers.snark}%`,
 							`style ${state.style} - met ${met} - ${state.sessions} sessions - energy ${Math.round(state.energy)}/100`,
 							`last 24h: ${n("test-pass")} tests pass - ${n("test-fail")} fail - ${n("commit")} commits - ${n("pr")} PRs - ${n("edit")} edits`,
 						];
 						return ctx.ui.notify(lines.join("\n"), "info");
+					}
+
+					case "status": {
+						const status = getManagerStatus();
+						const activePid = status.electronPid ? `PID ${status.electronPid}` : "Not running";
+						const activePort = status.serverPort ? `Port ${status.serverPort}` : "Not listening";
+						const id = state.style === "image" ? state.imagePetSlug || "Petdex" : state.asciiPetKey;
+						const pers = getPetPersonality(id, state.nick);
+						const awake = isAwake() ? " - awake" : "";
+						const identity =
+							state.style === "image"
+								? `${displayName()} (${state.imagePetSlug || "Petdex"})`
+								: `${displayName()} the ${asciiMon().name} (${asciiMon().type})`;
+						const lines = [
+							`${identity} - ${state.style} (${pers.tier}) - ${state.sessions} sessions - energy ${Math.round(state.energy)}% - mood ${state.mood}${awake}`,
+							`Local Server: ${activePort}`,
+							`Electron App: ${activePid}`,
+						];
+						return ctx.ui.notify(lines.join("\n"), "info");
+					}
+
+					case "ps":
+					case "processes": {
+						const status = getManagerStatus();
+						const pokepetLines = [
+							"Active Pokepet Processes:",
+							`  - Name: pi-pokepet Extension Server (PID: ${process.pid}, Port: ${status.serverPort || "Not listening"})`,
+							`  - Name: pi-pokepet Electron Companion (PID: ${status.electronPid ?? "Not running"})`,
+							`  - Name: Keep-Awake (${awakeMethod || "None"}) (PID: ${awakeProc?.pid ?? "Not running"})`,
+						];
+
+						if (value) {
+							const matched = getSystemProcesses(value);
+							if (matched.length === 0) {
+								return ctx.ui.notify(`No system processes found matching "${value}".`, "info");
+							}
+							const displayed = matched.slice(0, 30);
+							const lines = [
+								`System processes matching "${value}" (${matched.length} found):`,
+								...displayed.map((p) => `  - PID: ${p.pid} | Name: ${p.name}`),
+							];
+							if (matched.length > 30) {
+								lines.push(`  ... and ${matched.length - 30} more processes.`);
+							}
+							return ctx.ui.notify(lines.join("\n"), "info");
+						}
+
+						pokepetLines.push(
+							"",
+							"To search system-wide processes: /pet ps <query>",
+							"To kill any process by PID:      /pet kill <pid>",
+						);
+						return ctx.ui.notify(pokepetLines.join("\n"), "info");
+					}
+
+					case "kill": {
+						const status = getManagerStatus();
+						if (value) {
+							const pidToKill = Number.parseInt(value, 10);
+							if (Number.isNaN(pidToKill)) {
+								return ctx.ui.notify("Usage: /pet kill [pid]", "error");
+							}
+							if (pidToKill === process.pid) {
+								return ctx.ui.notify(
+									"Error: Terminating the Extension Server PID is blocked to prevent crashing the agent session.",
+									"error",
+								);
+							}
+							if (status.electronPid && pidToKill === status.electronPid) {
+								stopElectron();
+								return ctx.ui.notify("Electron companion process terminated.", "info");
+							}
+							if (awakeProc && pidToKill === awakeProc.pid) {
+								stopAwake();
+								lastRendered = "";
+								setMood("sleep", { message: "lock released - nap time" });
+								return ctx.ui.notify("Keep-awake process terminated.", "info");
+							}
+							try {
+								process.kill(pidToKill, "SIGTERM");
+								return ctx.ui.notify(`Successfully sent SIGTERM to process PID ${pidToKill}.`, "info");
+							} catch (err) {
+								return ctx.ui.notify(
+									`Failed to kill process PID ${pidToKill}: ${err instanceof Error ? err.message : String(err)}`,
+									"error",
+								);
+							}
+						}
+						stopElectron();
+						return ctx.ui.notify("Electron companion process terminated.", "info");
 					}
 
 					default: {

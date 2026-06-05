@@ -30,50 +30,41 @@ pi -e npm:pi-pokepet
 
 ```text
 /pet                         status
-/pet style image             use Petdex image pets
-/pet style ascii             use the legacy ASCII roster
+/pet style image             use Petdex image companion (Electron window)
+/pet style ascii             use the legacy ASCII roster (TUI only)
 /pet list                    list pets for the active style
 /pet choose <id>             choose an installed Petdex pet or ASCII pet
 /pet gallery [query]         search the public Petdex gallery
 /pet install <slug>          download and select a Petdex gallery pet
-/pet large                   enlarge the active pet
-/pet small                   return to compact size
 /pet nick <nickname>         give it a nickname
 /pet feed                    restore energy
 /pet awake [reason]          keep your system from sleeping
 /pet sleep                   release keep-awake or make the pet nap
 /pet stats                   productivity and bond dashboard
-/pet hide | show             toggle the widget
+/pet status                  show companion server port and Electron PID
+/pet ps | processes [query]  list active Pokepet or system-wide processes
+/pet kill [pid]              kill Electron process or any system PID
+/pet hide | show             toggle the terminal status widget
+/pet help                    show all available commands
 ```
 
 `/pokemon` is no longer registered. Use `/pet style ascii` for the original
 ASCII pets.
 
-## Petdex Image Pets
+## Petdex Image Pets (Electron Companion)
 
-Petdex pets use the Codex sprite format:
+When `/pet style image` is active, the extension runs a local HTTP/SSE server and launches a dedicated **Electron desktop companion**:
 
-```text
-~/.codex/pets/<slug>/
-|-- pet.json
-`-- spritesheet.webp  # or spritesheet.png
-```
-
-The spritesheet is an **8 column x 9 row atlas**. Rows are animation states:
-`idle`, `run right`, `run left`, `wave`, `jump`, `failed`, `waiting`,
-`running`, `review`.
+- **Premium UI**: A transparent, frameless, always-on-top window positioned in the bottom-right of your screen.
+- **Glassmorphic Speech Bubble**: A floating, bobbing speech bubble above the pet's head showing status messages in real-time.
+- **Click Reactions**: Clicking the pet triggers a happy jump animation override and makes the pet say a random coding/break/hydration quote.
+- **Terminal Status Widget**: While in image mode, the terminal displays a clean, compact status text line showing nickname, energy, and state, keeping the terminal layout uncluttered.
 
 Install one directly from the Petdex gallery:
 
 ```text
 /pet gallery boba
 /pet install boba
-```
-
-Or install with the Petdex CLI first:
-
-```bash
-npx petdex install boba
 ```
 
 Then select it in pi:
@@ -83,41 +74,47 @@ Then select it in pi:
 /pet choose boba
 ```
 
-Image pets render through Pi's native TUI image component on terminals with
-Kitty or iTerm2-compatible image support. This keeps the original Petdex frame
-as a real PNG, so pets look much closer to Codex-style sprite pets instead of
-being converted into text pixels.
+Energy persists across sessions in `~/.pi/agent/pokepet-state.json`.
 
-Native image mode is expected to work in Kitty, Ghostty, WezTerm, and iTerm2.
-Windows Terminal does not expose a Pi-supported image protocol yet, so this
-version uses the ANSI half-block fallback there. The fallback is rendered through
-a Pi component widget, not a plain string widget, so it can use a taller frame
-budget without being cut off by Pi's default string-widget line cap.
+| pi mood | Petdex row | Description |
+| --- | --- | --- |
+| idle, sleep | Row 0 (idle) | Pet stands still or snoozes. |
+| working | Row 1 & 2 (runRight/runLeft) | Pet walks or runs right/left while reading/writing files. |
+| talking | Row 3 (wave) | Pet waves when pi is explaining or planning. |
+| happy, hatch | Row 4 (jump) | Pet jumps up and down on task success or click. |
+| panic | Row 5 (failed) | Pet looks flat and sad on build/test failure or low energy click. |
+| guard | Row 6 (waiting) | Pet sits down when keep-awake is active, guarding the system. |
+| running | Row 7 (running) | Pet does skateboarding tricks/dances when executing commands. |
+| thinking, review tools | Row 8 (review) | Pet wears a detective hat/visor and magnifying glass when reasoning. |
 
-If `NO_COLOR` is set and native images are available, pi-pokepet still renders
-the native image and only removes text/status color. If `NO_COLOR` is set and
-native images are unavailable, image mode falls back to ASCII and notifies once.
+## Buddy Personalities & Rarity Tiers
 
-Small and large mode set display budgets only; the Petdex source frame is never
-cropped for native rendering. Long pet names and mood messages wrap onto
-additional lines.
+Every companion now has a unique, deterministic personality determined by its **slug** and **nickname**. Changing the pet's nickname recalculates its personality:
+- **Stats**: Individual values for **Chaos**, **Curiosity**, and **Snark** (ranging from 10 to 100).
+- **Rarity Tiers**: **Common**, **Rare**, or **Legendary**, which influence the ranges of your pet's stats.
+- **Themed click responses**: Clicking on the pet triggers a dialogue response matching its dominant personality stat.
+- Check these stats anytime with `/pet stats`!
 
-## Mood Mapping
+## Smart Task Notifications
 
-pi-pokepet maps pi activity to Petdex rows:
+Never miss a long-running build or test completion:
+- **Build Complete / Tests Passed**: Shows an emerald green glowing speech bubble and sets the pet to a happy jumping state.
+- **Build Failed / Tests Failed**: Shows a crimson red glowing speech bubble and sets the pet to a flat/sad state.
+- The notification bubble stays visible for **7 seconds** to ensure you see it.
 
-| pi mood | Petdex row |
-| --- | --- |
-| idle, sleep | idle |
-| talking | wave |
-| thinking | review |
-| working | running |
-| review tools | review |
-| happy, hatch | jump |
-| panic | failed |
-| guard | waiting |
+## Low Energy Reactions
 
-The animation loop uses each row's standard Petdex frame count.
+Keep your companion fed! 
+- If energy drops below **20**, clicking the pet canvas triggers Row 5 (`failed` sad flat state) and frantic jumping, accompanied by a complaining quote (e.g. *"Ouch! Tummy rumbles... need a berry! 🍇"*).
+
+## Community Pet Installation (`codex-pets.net`)
+
+If a pet is not found in the standard Petdex manifest when running `/pet install <slug>`, the installer automatically falls back to:
+```bash
+npx -y codex-pets add <slug>
+```
+This downloads and extracts the pet into `~/.codex/pets/<slug>/` where Pokepet loads and selects it.
+
 
 ## ASCII Roster
 
@@ -131,11 +128,7 @@ The original ASCII pets remain available with `/pet style ascii`:
 - Jigglypuff
 - Psyduck
 
-Use `/pet large` for detailed line art and `/pet small` for the compact footer
-pet.
-
-If the terminal is too narrow for a detailed ASCII drawing, pi-pokepet shows the
-compact ASCII frame instead of allowing the large frame to be truncated.
+ASCII pets are rendered directly in the terminal widget in a compact, neat layout.
 
 > The ASCII roster is an unofficial fan project. Pokemon and Pokemon character
 > names are trademarks of Nintendo, Creatures Inc., and GAME FREAK Inc. This
