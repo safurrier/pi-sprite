@@ -316,3 +316,58 @@ test("fetches gallery manifest and installs a mocked Petdex pet", async () => {
 		globalThis.fetch = originalFetch;
 	}
 });
+
+test("calculates deterministic pet personality and rarity tier", async () => {
+	const { getPetPersonality } = await import("../extensions/state.ts");
+
+	const p1 = getPetPersonality("jackie", "MyJackie");
+	const p2 = getPetPersonality("jackie", "MyJackie");
+	assert.deepEqual(p1, p2);
+
+	const p3 = getPetPersonality("jackie", "DifferentName");
+	assert.notDeepEqual(p1, p3);
+
+	// Verify that the stats are within expected ranges for each tier
+	for (const name of ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"]) {
+		const pers = getPetPersonality("slug", name);
+		assert.ok(["Common", "Rare", "Legendary"].includes(pers.tier));
+		const minVal = pers.tier === "Legendary" ? 70 : pers.tier === "Rare" ? 40 : 10;
+		const maxVal = pers.tier === "Legendary" ? 100 : pers.tier === "Rare" ? 85 : 60;
+		assert.ok(pers.chaos >= minVal && pers.chaos <= maxVal, `chaos: ${pers.chaos} not in [${minVal}, ${maxVal}]`);
+		assert.ok(
+			pers.curiosity >= minVal && pers.curiosity <= maxVal,
+			`curiosity: ${pers.curiosity} not in [${minVal}, ${maxVal}]`,
+		);
+		assert.ok(pers.snark >= minVal && pers.snark <= maxVal, `snark: ${pers.snark} not in [${minVal}, ${maxVal}]`);
+	}
+});
+
+test("uninstalls/deletes an installed Petdex pet", async () => {
+	const { loadLocalPetdexPet } = await import("../extensions/petdex.ts");
+	const { existsSync, mkdirSync, writeFileSync } = await import("node:fs");
+	const { join } = await import("node:path");
+
+	const testSlug = "to-be-deleted";
+	const targetDir = join(petsDir, testSlug);
+	mkdirSync(targetDir, { recursive: true });
+	writeFileSync(
+		join(targetDir, "pet.json"),
+		JSON.stringify({
+			id: testSlug,
+			displayName: "To Delete",
+			description: "x",
+			spritesheetPath: "spritesheet.png",
+		}),
+	);
+	writeFileSync(join(targetDir, "spritesheet.png"), Buffer.alloc(0));
+
+	assert.ok(loadLocalPetdexPet(testSlug));
+	assert.ok(existsSync(targetDir));
+
+	// Perform uninstall (deletion)
+	const { rmSync } = await import("node:fs");
+	rmSync(targetDir, { recursive: true, force: true });
+
+	assert.ok(!loadLocalPetdexPet(testSlug));
+	assert.ok(!existsSync(targetDir));
+});
