@@ -109,10 +109,7 @@ function spawnElectron(binaryPath: string): void {
 			if (fastExitCount >= 2 && installStatus === "ready") {
 				installStatus = "failed";
 				statusReason = "window failed to start (missing system libs or no display?)";
-				notifyFn?.(
-					"Electron window couldn't start; showing the ASCII pet instead. Details in /pet status.",
-					"error",
-				);
+				notifyFn?.("Electron window couldn't start; showing the ASCII pet instead. Details in /pet status.", "error");
 				onReadyFn?.();
 			}
 		} else {
