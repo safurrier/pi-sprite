@@ -1,6 +1,6 @@
 {
 	"name": "pi-pokepet",
-	"version": "1.6.3",
+	"version": "1.6.4",
 	"bin": {
 		"pi-pokepet": "./scripts/cli.js",
 		"pi-pets": "./scripts/cli.js",
