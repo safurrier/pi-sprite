@@ -1,9 +1,10 @@
 {
 	"name": "pi-pokepet",
-	"version": "1.6.2",
+	"version": "1.6.3",
 	"bin": {
 		"pi-pokepet": "./scripts/cli.js",
-		"pi-pets": "./scripts/cli.js"
+		"pi-pets": "./scripts/cli.js",
+		"pi-pet": "./scripts/cli.js"
 	},
 	"description": "A cute, colorful pet companion for the pi coding agent. Use classic ASCII pets or Petdex image pets that live below your editor and react to tools, tests, commits, PRs, reviews, subagents, model swaps and more.",
 	"keywords": [
@@ -46,7 +47,6 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.16",
-		"electron": "^42.3.3",
 		"tsx": "^4.22.3"
 	},
 	"files": [
@@ -58,6 +58,7 @@
 	],
 	"dependencies": {
 		"@earendil-works/pi-tui": "^0.77.0",
+		"electron": "^42.3.3",
 		"sharp": "^0.33.5"
 	}
 }

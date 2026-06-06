@@ -32,6 +32,7 @@ pi -e npm:pi-pokepet
 /pet                         status
 /pet style image             use Petdex image companion (Electron window)
 /pet style ascii             use the legacy ASCII roster (TUI only)
+/pet setup | repair          install or repair the Electron companion runtime
 /pet list                    list pets for the active style
 /pet choose <id>             choose an installed Petdex pet or ASCII pet
 /pet gallery [query]         search the public Petdex gallery
@@ -41,7 +42,7 @@ pi -e npm:pi-pokepet
 /pet awake [reason]          keep your system from sleeping
 /pet sleep                   release keep-awake or make the pet nap
 /pet stats                   productivity and bond dashboard
-/pet status                  show companion server port and Electron PID
+/pet status                  show server port, Electron PID, and runtime state
 /pet ps | processes [query]  list active Pokepet or system-wide processes
 /pet kill [pid]              kill Electron process or any system PID
 /pet hide | show             toggle the terminal status widget
@@ -70,9 +71,13 @@ Install one directly from the Petdex gallery:
 Or install any Petdex/Codex pet directly from your system command-line terminal:
 
 ```bash
-npx pi-pets add boba
-# or: npx pi-pokepet add boba
+npx pi-pokepet add boba
 ```
+
+> `npx` resolves packages by their **package name**, so always use
+> `npx pi-pokepet add <slug>`. The `pi-pets` / `pi-pet` aliases only work as
+> local commands once the package is installed (e.g. `pi-pet add <slug>`), not
+> via a standalone `npx pi-pets`/`npx pi-pet`.
 
 Then select it in pi:
 
@@ -93,6 +98,75 @@ Energy persists across sessions in `~/.pi/agent/pokepet-state.json`.
 | guard | Row 6 (waiting) | Pet sits down when keep-awake is active, guarding the system. |
 | running | Row 7 (running) | Pet does skateboarding tricks/dances when executing commands. |
 | thinking, review tools | Row 8 (review) | Pet wears a detective hat/visor and magnifying glass when reasoning. |
+
+## Troubleshooting (Electron Companion)
+
+The image companion self-heals: on first `/pet style image` it verifies the
+Electron runtime and, if missing, downloads it once in the background. While it
+sets up (or if it can't run), the terminal always shows a live **ASCII pet** so
+you're never left with a blank or errored widget.
+
+Check the runtime state anytime:
+
+```text
+/pet status      # look for the `Electron Runtime:` line (ready | installing | failed | unsupported)
+```
+
+### The window doesn't appear (Linux / Ubuntu)
+
+Electron needs system GUI libraries and a display server. If `/pet status` shows
+`Electron Runtime: failed` or the window spawns but never shows:
+
+```bash
+pi update                      # get the latest pi-pokepet
+# in pi:  /pet style image
+
+# if the window still doesn't appear, install the GUI libraries Electron needs:
+sudo apt-get install -y libnss3 libatk1.0-0 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2
+
+# then retry the runtime in pi:
+#   /pet setup
+```
+
+### Headless / SSH / WSL (no display)
+
+If there's no `DISPLAY` / `WAYLAND_DISPLAY`, the Electron window can't open and
+`/pet status` shows `Electron Runtime: unsupported`. This is expected — the pet
+automatically runs in ASCII mode instead. Check your session has a display:
+
+```bash
+echo $DISPLAY            # empty on a headless/SSH session
+```
+
+### `Electron binary not found` / setup keeps failing
+
+The one-time download comes from GitHub releases; a proxy or offline machine can
+block it. Retry, or install the runtime manually into the package:
+
+```bash
+# retry in pi:
+#   /pet setup
+
+# or install Electron manually (scripts must be enabled so the binary downloads):
+cd ~/.pi/agent/npm/node_modules/pi-pokepet
+npm install electron@^42.3.3 --no-save --foreground-scripts
+
+# verify the binary resolves (should print a path, not an error):
+node -e "console.log(require('electron'))"
+```
+
+If `npm config get ignore-scripts` prints `true`, that's why the binary never
+downloads — the commands above force scripts on with `--foreground-scripts`.
+
+### Installing a pet from the terminal does nothing
+
+Use the **package name** with `npx` — only `pi-pokepet` resolves standalone:
+
+```bash
+npx pi-pokepet add <slug>      # ✅ works
+# npx pi-pets add <slug>       # ❌ no such published package
+# npx pi-pet  add <slug>       # ❌ resolves to an unrelated package
+```
 
 ## Buddy Personalities & Rarity Tiers
 

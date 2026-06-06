@@ -29,8 +29,12 @@ import {
 } from "./content.ts";
 import {
 	broadcastState,
+	getElectronAvailability,
 	getManagerStatus,
 	launchElectron,
+	retryElectronSetup,
+	setElectronHooks,
+	shouldRenderAsciiFallback,
 	startElectronManager,
 	stopElectron,
 	stopElectronManager,
@@ -266,22 +270,29 @@ function render(): void {
 					: 250;
 
 	if (state.style === "image") {
-		// Launch Electron if not running
+		// Launch Electron if not running (self-heals a missing runtime once).
 		launchElectron();
 		// Broadcast state changes
 		broadcastState();
 
-		const nameColor = 117;
-		const tag = "Petdex";
-		const status = statusLines(nameColor, tag, messageColor, maxColumns);
-		const meter = dim(`${c(203, "\u2665")}${bar(state.energy)} ${Math.round(state.energy)}`);
+		// When the Electron window can't run yet (installing / headless / failed),
+		// show the live ASCII pet in the terminal so there is always a companion.
+		if (!shouldRenderAsciiFallback()) {
+			const nameColor = 117;
+			const tag = "Petdex";
+			const status = statusLines(nameColor, tag, messageColor, maxColumns);
+			const meter = dim(`${c(203, "\u2665")}${bar(state.energy)} ${Math.round(state.energy)}`);
 
-		const lines = [...status, meter];
-		const signature = ["text:electron", ...lines].join("\n");
-		if (signature === lastRendered) return;
-		lastRendered = signature;
-		ctxRef.ui.setWidget("pokepet", () => buildTextPetWidget({ lines }), { placement: "belowEditor" });
-		return;
+			const lines = [...status, meter];
+			const signature = ["text:electron", ...lines].join("\n");
+			if (signature === lastRendered) return;
+			lastRendered = signature;
+			ctxRef.ui.setWidget("pokepet", () => buildTextPetWidget({ lines }), {
+				placement: "belowEditor",
+			});
+			return;
+		}
+		// otherwise fall through to the ASCII renderer below as a live fallback
 	}
 
 	// ASCII path
@@ -426,6 +437,13 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 			}
 		}
 
+		setElectronHooks({
+			notify: (msg, level) => ctxRef?.ui.notify(msg, level),
+			onReady: () => {
+				lastRendered = "";
+				render();
+			},
+		});
 		startElectronManager();
 		saveState();
 		logEvent("session-start");
@@ -626,6 +644,7 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 						const helpLines = [
 							"Available commands:",
 							"  /pet style ascii|image  - Switch rendering style",
+							"  /pet setup              - Install/repair the Electron companion runtime",
 							"  /pet list               - List installed pets for active style",
 							"  /pet choose <id>        - Partner with an ASCII pet or installed Petdex pet",
 							"  /pet gallery [query]    - Search public Petdex gallery",
@@ -667,6 +686,17 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 						lastRendered = "";
 						setMood("happy", { message: style === "image" ? "Petdex image mode online!" : "ASCII mode online!" });
 						return ctx.ui.notify(`Pet style set to ${style}.`, "info");
+					}
+
+					case "setup":
+					case "repair": {
+						const avail = getElectronAvailability();
+						if (avail.status === "ready") {
+							return ctx.ui.notify("Electron companion is already installed and ready.", "info");
+						}
+						ctx.ui.notify("Setting up the Electron companion (one-time download)\u2026", "info");
+						retryElectronSetup();
+						return;
 					}
 
 					case "list": {
@@ -835,10 +865,14 @@ export default function pokepetExtension(pi: ExtensionAPI) {
 							state.style === "image"
 								? `${displayName()} (${state.imagePetSlug || "Petdex"})`
 								: `${displayName()} the ${asciiMon().name} (${asciiMon().type})`;
+						const avail = getElectronAvailability();
+						const runtime =
+							avail.status === "ready" ? "ready" : `${avail.status}${avail.reason ? ` (${avail.reason})` : ""}`;
 						const lines = [
 							`${identity} - ${state.style} (${pers.tier}) - ${state.sessions} sessions - energy ${Math.round(state.energy)}% - mood ${state.mood}${awake}`,
 							`Local Server: ${activePort}`,
 							`Electron App: ${activePid}`,
+							`Electron Runtime: ${runtime}`,
 						];
 						return ctx.ui.notify(lines.join("\n"), "info");
 					}

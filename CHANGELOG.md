@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.6.3 - Self-healing Electron runtime, Linux window fixes & CLI aliases
+
+- Fixed the `Electron binary not found` error spam on fresh installs. Because pi installs extensions with `npm install -g --ignore-scripts`, Electron's binary download postinstall never ran, so the companion window could not launch (most visible on Linux). The extension now provisions the runtime itself at first use.
+- Added a self-healing Electron bootstrap: on first image-mode launch the extension verifies the real binary (via `path.txt`, not just the `.bin` shim), and if it is missing, downloads it once in the background using Electron's own installer (with an `npm install electron --no-save` fallback). It forces `ignore-scripts=false` so it works even when the user's npmrc disables scripts.
+- Added a live ASCII fallback for image mode: while Electron is installing, on headless/SSH/WSL sessions (no `DISPLAY`/`WAYLAND_DISPLAY`), or if setup fails, the terminal always shows an animated pet instead of erroring.
+- Replaced the repeated `Electron binary not found` logging with single, transition-based user notifications (setup started / ready / failed).
+- Added `/pet setup` (alias `/pet repair`) to install or repair the Electron runtime on demand, and surfaced an `Electron Runtime` line in `/pet status`.
+- Moved `electron` from devDependencies to dependencies so the downloader ships with every install and the runtime auto-recovers after each `pi update`.
+- Fixed the Electron companion spawning but never appearing on Ubuntu/Linux. npm-installed Electron's `chrome-sandbox` is not setuid-root, which crashed the renderer on launch; the window now launches with `--no-sandbox` (safe — it only loads local content). Added `--enable-transparent-visuals` and deferred the first paint so the transparent, frameless widget actually renders on X11 instead of showing nothing.
+- Scoped the macOS-only `type: "panel"` window flag to macOS, since it prevented some Linux window managers from mapping the window at all.
+- Added crash-loop protection: if the window dies within seconds twice (e.g. missing system libs like `libnss3`/`libgbm`), the pet falls back to ASCII and reports the reason in `/pet status` instead of relaunching on every render.
+- Added a `pi-pet` CLI alias alongside `pi-pets` and `pi-pokepet`. Note: `npx` resolves by package name, so the canonical install-a-pet command is `npx pi-pokepet add <slug>`; the `pi-pet`/`pi-pets` aliases work when the package is installed locally.
+
 ## 1.6.2 - Electron Companion, Personalities, & Smart Notifications
 
 - Added a transparent premium Electron companion window with a floating glassmorphic speech bubble for image style pets.
