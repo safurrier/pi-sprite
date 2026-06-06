@@ -3,9 +3,21 @@ const path = require("node:path");
 
 const isLinux = process.platform === "linux";
 const isMac = process.platform === "darwin";
+const isWindows = process.platform === "win32";
 
 // --- Linux launch reliability (must be set before app 'ready') ---
 if (isLinux) {
+	// Force the X11 (XWayland) backend, even in a Wayland session. Native Wayland
+	// has NO protocol for a client to stay always-on-top or position itself, so a
+	// floating pet widget simply cannot work there (setAlwaysOnTop is a silent
+	// no-op and we can't anchor it bottom-right). Under XWayland, Mutter/KWin honor
+	// _NET_WM_STATE_ABOVE and client-set geometry, which is what this widget needs.
+	// Overrides ELECTRON_OZONE_PLATFORM_HINT=auto/wayland that GNOME/Ubuntu set.
+	// Only when an X server is reachable (DISPLAY set); otherwise we'd leave
+	// Electron with no usable backend on a pure-Wayland/no-XWayland session.
+	if (process.env.DISPLAY) {
+		app.commandLine.appendSwitch("ozone-platform", "x11");
+	}
 	// npm-installed Electron ships a chrome-sandbox helper that is not owned
 	// root:root / setuid, so the renderer crashes immediately on most Ubuntu
 	// setups — the window "spawns" but never appears. Disabling the sandbox is
@@ -31,6 +43,41 @@ if (isMac) {
 
 let mainWindow = null;
 let port = 0;
+let onTopTimer = null;
+
+// The strongest practical stacking level on each platform.
+const TOP_LEVEL = "screen-saver";
+
+// Re-assert always-on-top. Many Linux WMs (Mutter/KWin/etc.) silently drop the
+// hint after focus changes or when another window goes fullscreen, so a single
+// setAlwaysOnTop() at creation isn't enough — we nudge it back periodically.
+function reassertAlwaysOnTop() {
+	if (!mainWindow || mainWindow.isDestroyed()) return;
+	mainWindow.setAlwaysOnTop(true, TOP_LEVEL);
+	// Span workspaces/spaces: supported on macOS & Linux, a no-op on Windows.
+	if (!isWindows) {
+		mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+	}
+	// Only Linux WMs drop the stacking hint and need a forced raise; macOS and
+	// Windows honor always-on-top natively, so we never churn them.
+	if (isLinux) {
+		mainWindow.moveTop();
+	}
+}
+
+function startAlwaysOnTopGuard() {
+	if (onTopTimer) return;
+	// Only Linux needs continuous re-assertion; macOS/Windows honor it natively.
+	if (!isLinux) return;
+	onTopTimer = setInterval(reassertAlwaysOnTop, 1500);
+}
+
+function stopAlwaysOnTopGuard() {
+	if (onTopTimer) {
+		clearInterval(onTopTimer);
+		onTopTimer = null;
+	}
+}
 
 // Parse the port argument passed by the extension
 for (const arg of process.argv) {
@@ -40,6 +87,7 @@ for (const arg of process.argv) {
 }
 
 function createWindow() {
+	if (mainWindow && !mainWindow.isDestroyed()) return;
 	const { workArea } = screen.getPrimaryDisplay();
 	const windowWidth = 200;
 	const windowHeight = 200;
@@ -81,8 +129,15 @@ function createWindow() {
 	// Show only once the content is ready so the transparent surface is painted.
 	mainWindow.once("ready-to-show", () => {
 		mainWindow.show();
-		mainWindow.setAlwaysOnTop(true, isMac ? "screen-saver" : "floating");
+		reassertAlwaysOnTop();
+		startAlwaysOnTopGuard();
 	});
+
+	// Linux WMs often steal the top spot on blur — re-claim it. macOS/Windows
+	// don't need this, so we leave their native behavior untouched.
+	if (isLinux) {
+		mainWindow.on("blur", reassertAlwaysOnTop);
+	}
 
 	// Surface renderer crashes instead of silently spawning an invisible window.
 	mainWindow.webContents.on("render-process-gone", (_event, details) => {
@@ -95,6 +150,7 @@ function createWindow() {
 	});
 
 	mainWindow.on("closed", () => {
+		stopAlwaysOnTopGuard();
 		mainWindow = null;
 	});
 }
@@ -109,10 +165,11 @@ app.on("ready", () => {
 
 	createWindow();
 
+	// macOS desktop-widget behavior (unchanged from upstream): float above
+	// full-screen spaces. Windows honors alwaysOnTop from the constructor.
 	if (mainWindow && isMac) {
 		mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-		// Set level to floating/status level so it overlays full-screen apps too
-		mainWindow.setAlwaysOnTop(true, "screen-saver");
+		mainWindow.setAlwaysOnTop(true, TOP_LEVEL);
 	}
 });
 

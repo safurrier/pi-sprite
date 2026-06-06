@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.4 - Linux companion fixes (duplicate windows & always-on-top)
+
+- Fixed two Electron companion windows appearing in a single terminal on Linux. The companion is spawned detached so it survives the agent, but when pi exited uncleanly (terminal closed, SIGKILL, crash) `session_shutdown` never ran to kill it, leaving an orphan window that stacked with the next session's window. The manager now records the live companion's PID in `~/.pi/agent/pokepet-electron.pid` and, once at startup, reaps a verified leftover pokepet window before spawning a new one. The PID is validated against the companion's `main.cjs` path so a recycled PID is never killed, and reaping only runs at startup so two genuinely concurrent pi sessions don't fight over one window.
+- Fixed the companion never staying above other apps on Linux/Wayland. On a Wayland session (e.g. GNOME) Electron defaulted to the native Wayland backend, where the protocol has **no way for a client to request always-on-top or to position itself** — so `setAlwaysOnTop()` was a silent no-op and the window couldn't anchor bottom-right. The companion is now spawned with the **X11/XWayland** backend forced (`--ozone-platform=x11` as a real launch arg plus stripping `WAYLAND_DISPLAY` from the child env), which Mutter/KWin honor for `_NET_WM_STATE_ABOVE` and client geometry. (Setting the switch from inside `main.cjs` was too late — Ozone had already picked a platform.)
+- Strengthened always-on-top once on XWayland: the window marks itself visible on all workspaces (including fullscreen) and re-asserts on-top on a light interval and on every `blur`, so the WM can't quietly demote it after a focus change or a fullscreen app. Re-assertion runs on Linux only; macOS/Windows honor it once.
+- Hardened window creation against a rare double-create and cleaned up the always-on-top guard timer when the window closes.
+
 ## 1.6.3 - Self-healing Electron runtime, Linux window fixes & CLI aliases
 
 - Fixed the `Electron binary not found` error spam on fresh installs. Because pi installs extensions with `npm install -g --ignore-scripts`, Electron's binary download postinstall never ran, so the companion window could not launch (most visible on Linux). The extension now provisions the runtime itself at first use.
