@@ -57,26 +57,32 @@ async function manifestPets(): Promise<PetdexManifestPet[]> {
 		.filter((pet) => pet.slug && pet.displayName && pet.petJsonUrl && pet.spritesheetUrl);
 }
 
+function toGalleryPet(pet: PetdexManifestPet): GalleryPet {
+	return {
+		id: pet.slug,
+		displayName: pet.displayName,
+		source: "petdex",
+		kind: pet.kind,
+		submittedBy: pet.submittedBy,
+		petJsonUrl: pet.petJsonUrl,
+		spritesheetUrl: pet.spritesheetUrl,
+		zipUrl: pet.zipUrl,
+		installed: Boolean(loadPet(pet.slug)),
+	};
+}
+
 export async function listPetdexPets(query = ""): Promise<GalleryPet[]> {
 	const q = query.toLowerCase().trim();
 	return (await manifestPets())
 		.filter((pet) => !q || `${pet.slug} ${pet.displayName} ${pet.kind ?? ""}`.toLowerCase().includes(q))
 		.slice(0, 30)
-		.map((pet) => ({
-			id: pet.slug,
-			displayName: pet.displayName,
-			source: "petdex" as const,
-			kind: pet.kind,
-			submittedBy: pet.submittedBy,
-			petJsonUrl: pet.petJsonUrl,
-			spritesheetUrl: pet.spritesheetUrl,
-			zipUrl: pet.zipUrl,
-			installed: Boolean(loadPet(pet.slug)),
-		}));
+		.map(toGalleryPet);
 }
 
 export async function getPetdexPet(slug: string): Promise<GalleryPet | undefined> {
-	return (await listPetdexPets()).find((pet) => pet.id === slug);
+	const normalizedSlug = slug.toLowerCase().trim();
+	const pet = (await manifestPets()).find((entry) => entry.slug.toLowerCase() === normalizedSlug);
+	return pet ? toGalleryPet(pet) : undefined;
 }
 
 function spriteNameFromUrl(url: string): string {
