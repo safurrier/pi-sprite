@@ -61,7 +61,9 @@
 		"CHANGELOG.md"
 	],
 	"dependencies": {
-		"@earendil-works/pi-tui": "^0.77.0",
+		"@earendil-works/pi-tui": "*",
+		"@types/adm-zip": "^0.5.8",
+		"adm-zip": "^0.5.17",
 		"sharp": "^0.33.5"
 	}
 }

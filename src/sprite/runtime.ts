@@ -1,9 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename } from "node:path";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { importPetFolder, listPets, loadPet } from "./loader.ts";
+import { importPetFolder, importPetZip, listPets, loadPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 import { spriteHome, statePath } from "./paths.ts";
+import { installPetdexPet, listPetdexPets } from "./petdex.ts";
 
 interface SavedState {
 	selectedPetId?: string;
@@ -67,6 +68,32 @@ export function createSpriteRuntime() {
 		saveSaved({ selectedPetId, visible });
 	}
 
+	function activatePet(id: string): void {
+		if (!loadPet(id)) throw new Error(`Unknown pet ${id}. Try /pet list.`);
+		selectedPetId = id;
+		visible = true;
+		persist();
+		lastSignature = "";
+		render();
+	}
+
+	async function importPetUrl(urlText: string) {
+		const url = new URL(urlText);
+		if (url.protocol !== "https:") throw new Error("/pet import-url requires an https URL");
+		const response = await fetch(url);
+		if (!response.ok) throw new Error(`download failed (${response.status})`);
+		const bytes = Buffer.from(await response.arrayBuffer());
+		if (bytes.length > 25 * 1024 * 1024) throw new Error("download is too large");
+		const tmp = join(spriteHome(), `import-${Date.now()}.zip`);
+		mkdirSync(spriteHome(), { recursive: true });
+		writeFileSync(tmp, bytes);
+		try {
+			return importPetZip(tmp);
+		} finally {
+			rmSync(tmp, { force: true });
+		}
+	}
+
 	return {
 		async start(nextCtx: ExtensionContext) {
 			ctx = nextCtx;
@@ -89,7 +116,8 @@ export function createSpriteRuntime() {
 		},
 		registerCommands(pi: ExtensionAPI) {
 			pi.registerCommand("pet", {
-				description: "sprite companion: list | choose <id> | import <path> | hide | show",
+				description:
+					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show",
 				handler: async (args: string, commandCtx: ExtensionContext) => {
 					ctx = commandCtx;
 					const [cmd = "", ...rest] = args.trim().split(/\s+/u).filter(Boolean);
@@ -111,24 +139,61 @@ export function createSpriteRuntime() {
 						}
 						case "choose": {
 							if (!value) throw new Error("Usage: /pet choose <id>");
-							if (!loadPet(value)) throw new Error(`Unknown pet ${value}. Try /pet list.`);
-							selectedPetId = value;
-							visible = true;
-							persist();
-							lastSignature = "";
-							render();
+							activatePet(value);
 							commandCtx.ui.notify(`Selected ${selectedName()}.`, "info");
 							break;
 						}
 						case "import": {
 							if (!value) throw new Error("Usage: /pet import <path>");
 							const pet = importPetFolder(value);
-							selectedPetId = pet.id;
-							visible = true;
-							persist();
-							lastSignature = "";
-							render();
+							activatePet(pet.id);
 							commandCtx.ui.notify(`Imported and selected ${pet.manifest.name}.`, "info");
+							break;
+						}
+						case "import-url": {
+							if (!value) throw new Error("Usage: /pet import-url <url>");
+							const pet = await importPetUrl(value);
+							activatePet(pet.id);
+							commandCtx.ui.notify(`Imported and selected ${pet.manifest.name}.`, "info");
+							break;
+						}
+						case "gallery":
+						case "search": {
+							const pets = await listPetdexPets(value);
+							commandCtx.ui.notify(
+								pets.length
+									? `Petdex gallery:\n${pets.map((pet) => `${pet.id} - ${pet.displayName}${pet.installed ? " (installed)" : ""}`).join("\n")}`
+									: "No Petdex pets matched.",
+								"info",
+							);
+							break;
+						}
+						case "preview": {
+							if (!value) throw new Error("Usage: /pet preview <slug>");
+							const pet =
+								(await listPetdexPets(value)).find((candidate) => candidate.id === value) ??
+								(await listPetdexPets(value))[0];
+							if (!pet) throw new Error(`No Petdex pet found for ${value}`);
+							commandCtx.ui.notify(
+								[
+									pet.displayName,
+									`id: ${pet.id}`,
+									pet.kind ? `kind: ${pet.kind}` : "",
+									pet.submittedBy ? `by: ${pet.submittedBy}` : "",
+									`installed: ${pet.installed ? "yes" : "no"}`,
+									`Install: /pet install ${pet.id}`,
+								]
+									.filter(Boolean)
+									.join("\n"),
+								"info",
+							);
+							break;
+						}
+						case "install": {
+							if (!value) throw new Error("Usage: /pet install <slug>");
+							const pet = await installPetdexPet(value);
+							activatePet(pet.id);
+							commandCtx.ui.notify(`Installed and selected ${pet.manifest.name}.`, "info");
 							break;
 						}
 						case "hide":
@@ -145,7 +210,10 @@ export function createSpriteRuntime() {
 							commandCtx.ui.notify("pi-sprite shown.", "info");
 							break;
 						default:
-							commandCtx.ui.notify("Usage: /pet [list|choose <id>|import <path>|hide|show]", "info");
+							commandCtx.ui.notify(
+								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show]",
+								"info",
+							);
 					}
 				},
 			});
