@@ -1,0 +1,11 @@
+{
+	"id": "valid-expanded",
+	"name": "Valid Expanded",
+	"sprites": {
+		"idle": "idle.png",
+		"thinking": "thinking.png",
+		"working": "working.png",
+		"success": "success.png",
+		"error": "error.png"
+	}
+}

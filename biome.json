@@ -9,7 +9,7 @@
 		}
 	},
 	"files": {
-		"includes": ["**", "!.pi"]
+		"includes": ["**", "!.pi", "!.harness-local", "!node_modules", "!artifacts", "!test-results"]
 	},
 	"linter": {
 		"enabled": true,
@@ -29,6 +29,9 @@
 					}
 				},
 				"noNonNullAssertion": "off"
+			},
+			"suspicious": {
+				"noExplicitAny": "off"
 			}
 		}
 	},
