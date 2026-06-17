@@ -129,6 +129,76 @@ pi-sprite/
     └── pi-sprite-implementation-spec.md
 ```
 
+## Definition of done for the full implementation
+
+The whole `pi-sprite` implementation is done when all of the following are true:
+
+### Product behavior
+
+- `/pet` provides a small passive sprite below the editor.
+- `/pet list`, `/pet choose <id>`, `/pet import <path>`, `/pet hide`, and `/pet show` work.
+- Local expanded pets and Codex/Petdex-style `pet.json + spritesheet.webp` packages import and render.
+- Petdex gallery/search/preview/install works, or fails gracefully offline with cached/fallback messaging.
+- `/context` opens a Claude-Code-style TUI visualizer with a grid/cell representation, model/window summary, token usage, category estimates, and free-space row.
+- `/context all` expands details.
+- `/recap` manually generates a structured recap with `Goal`, `State`, `Decisions`, `Files/commands`, and `Next`.
+- `/btw <question>`, `/btw:new`, `/btw:clear`, `/btw:inject`, and `/btw:summarize` work; side-thread content stays out of main context until explicit injection/summarization.
+
+### Non-goals remain absent
+
+Runtime code does not reintroduce:
+
+- Electron, Glimpse, native floating windows, HTTP/SSE servers, or process managers.
+- Voice, TTS, sound, ambient weather, songs, or mic integration.
+- Hunger, feeding, bonding, XP, stats dashboards, accessories, treats, or pet economy.
+- Autonomous pet commentary/personality.
+- 3D/raymarched rendering.
+
+### Validation framework
+
+- `mise run check` is the fast local gate and passes.
+- `mise run ci` delegates to the fast gate and passes in GitHub Actions.
+- `mise run verify` includes heavier package/TUI/E2E smoke validation and passes locally before merge.
+- CI uploads `test-results/` and `artifacts/e2e/` when present.
+- Test fixtures cover local pets, Codex/Petdex packages, malicious imports, and ZIP/URL import edge cases.
+
+### Automated tests
+
+- Unit tests cover sprite state transitions, manifest parsing, import security, renderer behavior, context usage/category formatting, recap prompt/sanitization, and BTW side-session persistence/injection.
+- Non-feature regression tests fail if forbidden runtime concepts are reintroduced.
+- Package validation passes:
+
+```bash
+npm run check
+npm pack --dry-run
+mise run check
+```
+
+### TUI and E2E evidence
+
+- Manual Pi smoke passes with:
+
+```bash
+pi -e ~/worktrees/pi-sprite
+```
+
+- Tmux/TUI captures exist under `artifacts/e2e/` for:
+  - default sprite render.
+  - local pet import/choose/reload.
+  - Codex/Petdex pet render.
+  - `/context` overlay.
+- E2E assertion scripts verify captures for expected text, grid/cells, category rows, and non-empty sprite frames.
+- Model-backed E2E for `/recap` and `/btw` passes when `PI_SPRITE_E2E_MODEL=1` is set.
+- Network-backed Petdex/import-url E2E passes when `PI_SPRITE_E2E_NETWORK=1` is set.
+
+### Packaging and dots integration
+
+- README documents install, commands, import/gallery, `/context`, `/recap`, `/btw`, non-features, and troubleshooting.
+- `NOTICE.md` and `LICENSE` preserve required `pi-pokepet` MIT attribution while derived code remains.
+- `pi install git:github.com/safurrier/pi-sprite` works from a clean environment.
+- Dots consumes `pi-sprite` from this standalone repo only after package validation passes.
+- Dots removes/disables conflicting old Pompom/context packages, and `/pet`, `/context`, `/recap`, `/btw` resolve to `pi-sprite` without command collisions.
+
 ## Implementation phases
 
 Each phase should land with its own validation evidence. Do not start the dots migration until the package repo passes the package-level and Pi-level smoke tests.
