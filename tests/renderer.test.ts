@@ -3,9 +3,15 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { setCapabilities } from "@earendil-works/pi-tui";
 import sharp from "sharp";
 import type { InstalledPet } from "../src/sprite/loader.ts";
-import { renderSpriteFrame } from "../src/sprite/renderer.ts";
+import {
+	buildNativeSpriteWidget,
+	renderSpriteAnimation,
+	renderSpriteFrame,
+	supportsNativeSpriteImages,
+} from "../src/sprite/renderer.ts";
 
 async function withPet<T>(fn: (pet: InstalledPet) => Promise<T>): Promise<T> {
 	const dir = mkdtempSync(join(tmpdir(), "pi-sprite-render-"));
@@ -40,7 +46,22 @@ test("renders image pets as terminal half-block frames", async () => {
 	});
 });
 
-test("renders the first frame from Codex/Petdex-style spritesheets", async () => {
+test("detects native sprite image capability and builds a native widget", () => {
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+	try {
+		assert.equal(supportsNativeSpriteImages(), true);
+		const widget = buildNativeSpriteWidget(
+			{ base64: Buffer.from("not-a-real-png").toString("base64"), filename: "x.png", width: 1, height: 1 },
+			"status",
+			123,
+		);
+		assert.ok(widget.render(20).length > 0);
+	} finally {
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	}
+});
+
+test("renders configured multi-frame Codex/Petdex-style spritesheets", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "pi-sprite-sheet-"));
 	try {
 		await sharp({
@@ -60,7 +81,7 @@ test("renders the first frame from Codex/Petdex-style spritesheets", async () =>
 			])
 			.webp()
 			.toFile(join(dir, "spritesheet.webp"));
-		const frame = await renderSpriteFrame(
+		const animation = await renderSpriteAnimation(
 			{
 				id: "sheet-pet",
 				dir,
@@ -73,8 +94,39 @@ test("renders the first frame from Codex/Petdex-style spritesheets", async () =>
 			},
 			"idle",
 		);
-		assert.ok(frame.signature.includes("4x4"));
-		assert.match(frame.lines.join("\n"), /Sheet Pet/u);
+		assert.equal(animation.frames.length, 2);
+		assert.match(animation.frames[0]!.lines.join("\n"), /Sheet Pet/u);
+	} finally {
+		rmSync(dir, { recursive: true, force: true });
+	}
+});
+
+test("infers Petdex 8x9 atlas frames for spritesheet paths", async () => {
+	const dir = mkdtempSync(join(tmpdir(), "pi-sprite-atlas-"));
+	try {
+		await sharp({
+			create: { width: 32, height: 36, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+		})
+			.composite(
+				Array.from({ length: 6 }, (_, col) => ({
+					input: Buffer.from(
+						`<svg width="4" height="4"><rect width="4" height="4" fill="rgb(${col * 30},255,0)"/></svg>`,
+					),
+					left: col * 4,
+					top: 0,
+				})),
+			)
+			.webp()
+			.toFile(join(dir, "spritesheet.webp"));
+		const animation = await renderSpriteAnimation(
+			{
+				id: "atlas-pet",
+				dir,
+				manifest: { id: "atlas-pet", name: "Atlas Pet", sprites: { idle: "spritesheet.webp" } },
+			},
+			"idle",
+		);
+		assert.equal(animation.frames.length, 6);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
