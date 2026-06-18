@@ -70,7 +70,7 @@ export async function answerWithSideSession(ctx: ExtensionCommandContext, prompt
 		return await new Promise<string | undefined>((resolve) => {
 			const timer = setTimeout(() => resolve(undefined), 120_000);
 			unsubscribe = session?.subscribe((event) => {
-				if (event.type !== "agent_end") return;
+				if (event.type !== "agent_end" || event.willRetry) return;
 				clearTimeout(timer);
 				resolve(extractAssistantText(event.messages as unknown[]));
 			});
