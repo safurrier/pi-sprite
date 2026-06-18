@@ -22,7 +22,7 @@ function sideResourceLoader(ctx: ExtensionCommandContext): ResourceLoader {
 		getPrompts: () => ({ prompts: [], diagnostics: [] }),
 		getThemes: () => ({ themes: [], diagnostics: [] }),
 		getAgentsFiles: () => ({ agentsFiles: [] }),
-		getSystemPrompt: () => ctx.getSystemPrompt?.(),
+		getSystemPrompt: () => undefined,
 		getAppendSystemPrompt: () => [SIDE_SYSTEM_PROMPT],
 		extendResources: () => {},
 		reload: async () => {},
