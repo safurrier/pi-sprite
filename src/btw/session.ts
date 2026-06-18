@@ -14,7 +14,7 @@ const SIDE_SYSTEM_PROMPT = [
 	"Answer concisely and do not mutate files or assume you should continue the main task.",
 ].join("\n");
 
-function sideResourceLoader(ctx: ExtensionCommandContext): ResourceLoader {
+function sideResourceLoader(): ResourceLoader {
 	const extensions = { extensions: [], errors: [], runtime: createExtensionRuntime() };
 	return {
 		getExtensions: () => extensions,
@@ -63,7 +63,7 @@ export async function answerWithSideSession(ctx: ExtensionCommandContext, prompt
 			sessionManager: SessionManager.inMemory(ctx.cwd),
 			model: cappedModel,
 			modelRegistry: ctx.modelRegistry as any,
-			resourceLoader: sideResourceLoader(ctx),
+			resourceLoader: sideResourceLoader(),
 			tools: [],
 		});
 		session = created.session;
