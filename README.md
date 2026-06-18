@@ -71,13 +71,14 @@ Minimal `pet.json`:
 }
 ```
 
-Codex/Petdex `pet.json + spritesheet.webp` compatibility is planned and partially recognized by the manifest parser; full spritesheet frame extraction is a follow-up phase.
+Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported for first-frame rendering. When `frame.width` and `frame.height` are present, `pi-sprite` crops the first spritesheet frame and renders it as compact terminal half-block art.
 
 ### `/context`
 
 ```text
 /context
 /context all
+/sprite:context
 ```
 
 Shows a Claude-Code-style TUI overlay with:
@@ -87,6 +88,8 @@ Shows a Claude-Code-style TUI overlay with:
 - token total and percent
 - estimated category breakdown
 - free-space row
+
+`/sprite:context` is the same visualizer under a package-specific alias, useful when another Pi command named `/context` is present.
 
 ### `/recap`
 

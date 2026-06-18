@@ -50,24 +50,19 @@ for (const [cmd, args] of checks) run(cmd, args);
 
 if (process.env.PI_SPRITE_E2E_TUI === "1") {
 	await writeRenderFixture();
-	for (const scenario of ["pet", "render"]) run("bash", ["tests/e2e/tmux-smoke.sh", scenario]);
+	for (const scenario of ["pet", "render", "context"]) run("bash", ["tests/e2e/tmux-smoke.sh", scenario]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/pet.txt", "--contains", "pi-sprite"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/render.txt", "--contains", "E2E Render Pet"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/render.txt", "--contains", "▀"]);
+	run("node", ["tests/e2e/assert-context-overlay.mjs", "artifacts/e2e/context.txt"]);
 } else {
 	writeFileSync("artifacts/e2e/tui-skipped.txt", "Set PI_SPRITE_E2E_TUI=1 to run tmux-backed Pi TUI smoke tests.\n");
 }
 
-if (process.env.PI_SPRITE_E2E_CONTEXT === "1") {
-	run("bash", ["tests/e2e/tmux-smoke.sh", "context"]);
-	run("node", ["tests/e2e/assert-context-overlay.mjs", "artifacts/e2e/context.txt"]);
-}
-
 if (process.env.PI_SPRITE_E2E_MODEL === "1") {
-	writeFileSync(
-		"artifacts/e2e/model-skipped.txt",
-		"Model-backed /recap and /btw E2E is not automated yet; this gate is reserved for the next pass.\n",
-	);
+	for (const scenario of ["btw", "recap"]) run("bash", ["tests/e2e/tmux-smoke.sh", scenario]);
+	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw.txt", "--contains", "BTW side thread"]);
+	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/recap.txt", "--contains", "Session Recap"]);
 }
 
 if (process.env.PI_SPRITE_E2E_NETWORK === "1") {

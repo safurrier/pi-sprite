@@ -154,18 +154,23 @@ class ContextOverlay {
 }
 
 export function registerContextCommand(pi: ExtensionAPI) {
+	const handler = async (args: string, ctx: ExtensionCommandContext) => {
+		const model = buildUsage(ctx, pi);
+		if (!model) return ctx.ui.notify("Context usage info is not available yet. Send a message first.", "warning");
+		await ctx.ui.custom(
+			(_tui, _theme, _kb, done) => new ContextOverlay(model, args.trim() === "all", () => done(undefined)),
+			{
+				overlay: true,
+				overlayOptions: { anchor: "center", width: "88%", minWidth: 72, maxHeight: "90%" },
+			},
+		);
+	};
 	pi.registerCommand("context", {
 		description: "Show Claude-style context usage visualization",
-		handler: async (args: string, ctx: ExtensionCommandContext) => {
-			const model = buildUsage(ctx, pi);
-			if (!model) return ctx.ui.notify("Context usage info is not available yet. Send a message first.", "warning");
-			await ctx.ui.custom(
-				(_tui, _theme, _kb, done) => new ContextOverlay(model, args.trim() === "all", () => done(undefined)),
-				{
-					overlay: true,
-					overlayOptions: { anchor: "center", width: "88%", minWidth: 72, maxHeight: "90%" },
-				},
-			);
-		},
+		handler,
+	});
+	pi.registerCommand("sprite:context", {
+		description: "Show pi-sprite context usage visualization",
+		handler,
 	});
 }
