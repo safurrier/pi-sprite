@@ -244,7 +244,6 @@ git remote add origin git@github.com:safurrier/pi-sprite.git
 - Add the validation framework before feature work:
 
 ```text
-.mise.toml
 .mise/tasks/setup
 .mise/tasks/fmt
 .mise/tasks/lint

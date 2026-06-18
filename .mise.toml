@@ -1,7 +1,0 @@
-#:schema https://mise.jdx.dev/schema/mise.json
-
-[tools]
-node = "22"
-
-[env]
-MISE_PROJECT_ROOT = "{{config_root}}"
