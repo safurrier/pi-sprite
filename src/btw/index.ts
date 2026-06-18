@@ -1,6 +1,7 @@
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Container, matchesKey, Text } from "@earendil-works/pi-tui";
+import { answerWithSideSession } from "./session.ts";
 
 const ENTRY = "pi-sprite:btw-entry";
 const RESET = "pi-sprite:btw-reset";
@@ -89,17 +90,20 @@ async function askSideQuestion(pi: ExtensionAPI, question: string, ctx: Extensio
 		"",
 		`Side question: ${question}`,
 	].join("\n");
-	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
-	const response = await complete(
-		ctx.model,
-		{ messages },
-		{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 1200 },
-	);
-	const answer = response.content
-		.filter((p): p is { type: "text"; text: string } => p.type === "text")
-		.map((p) => p.text)
-		.join("\n")
-		.trim();
+	let answer = await answerWithSideSession(ctx, prompt);
+	if (!answer) {
+		const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
+		const response = await complete(
+			ctx.model,
+			{ messages },
+			{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 1200 },
+		);
+		answer = response.content
+			.filter((p): p is { type: "text"; text: string } => p.type === "text")
+			.map((p) => p.text)
+			.join("\n")
+			.trim();
+	}
 	if (!answer) return ctx.ui.notify("BTW response returned no text.", "warning");
 	const entry = { question, answer, timestamp: Date.now() };
 	thread.push(entry);
