@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const args = new Set(process.argv.slice(2));
+mkdirSync(join("artifacts", "e2e"), { recursive: true });
 const artifact = (name, content) => writeFileSync(join("artifacts", "e2e", name), content);
 
 function run(label, command, options = {}) {
