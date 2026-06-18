@@ -6,6 +6,8 @@ import {
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
 
+const BTW_SIDE_MAX_TOKENS = 1200;
+
 const SIDE_SYSTEM_PROMPT = [
 	"You are answering an explicit side question for a Pi coding session.",
 	"This is a separate BTW thread, not the main working turn.",
@@ -52,10 +54,14 @@ export async function answerWithSideSession(ctx: ExtensionCommandContext, prompt
 	let session: Awaited<ReturnType<typeof createAgentSession>>["session"] | undefined;
 	let unsubscribe: (() => void) | undefined;
 	try {
+		const cappedModel = {
+			...ctx.model,
+			maxTokens: Math.min(ctx.model.maxTokens ?? BTW_SIDE_MAX_TOKENS, BTW_SIDE_MAX_TOKENS),
+		};
 		const created = await createAgentSession({
 			cwd: ctx.cwd,
 			sessionManager: SessionManager.inMemory(ctx.cwd),
-			model: ctx.model,
+			model: cappedModel,
 			modelRegistry: ctx.modelRegistry as any,
 			resourceLoader: sideResourceLoader(ctx),
 			tools: [],
