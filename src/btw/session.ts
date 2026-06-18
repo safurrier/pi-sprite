@@ -53,7 +53,8 @@ export async function answerWithSideSession(ctx: ExtensionCommandContext, prompt
 	let unsubscribe: (() => void) | undefined;
 	try {
 		const created = await createAgentSession({
-			sessionManager: SessionManager.inMemory(),
+			cwd: ctx.cwd,
+			sessionManager: SessionManager.inMemory(ctx.cwd),
 			model: ctx.model,
 			modelRegistry: ctx.modelRegistry as any,
 			resourceLoader: sideResourceLoader(ctx),
