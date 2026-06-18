@@ -68,6 +68,7 @@ export function createSpriteRuntime() {
 			return;
 		}
 		const spritePath = pet.manifest.sprites[state] ?? pet.manifest.sprites.idle;
+		lastSignature = `loading:${pet.id}:${state}:${spritePath ?? ""}`;
 		currentCtx.ui.setWidget(
 			"pi-sprite",
 			[`  ◕‿◕  ${pet.manifest.name}`, `pi-sprite · loading ${state}${spritePath ? ` · ${basename(spritePath)}` : ""}`],
