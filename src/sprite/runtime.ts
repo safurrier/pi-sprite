@@ -5,6 +5,7 @@ import { importPetFolder, importPetZip, listPets, loadPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 import { spriteHome, statePath } from "./paths.ts";
 import { installPetdexPet, listPetdexPets } from "./petdex.ts";
+import { renderSpriteFrame } from "./renderer.ts";
 
 interface SavedState {
 	selectedPetId?: string;
@@ -38,30 +39,47 @@ export function createSpriteRuntime() {
 	let visible = true;
 	let resetTimer: ReturnType<typeof setTimeout> | undefined;
 	let lastSignature = "";
+	let renderGeneration = 0;
 
 	function selectedName(): string {
 		return selectedPetId ? (loadPet(selectedPetId)?.manifest.name ?? selectedPetId) : "default";
 	}
 
-	function linesForCurrentState(): string[] {
-		const pet = selectedPetId ? loadPet(selectedPetId) : undefined;
-		if (!pet) return DEFAULT_FRAMES[state];
-		const spritePath = pet.manifest.sprites[state] ?? pet.manifest.sprites.idle;
-		return [`  ◕‿◕  ${pet.manifest.name}`, `pi-sprite · ${state}${spritePath ? ` · ${basename(spritePath)}` : ""}`];
+	function defaultLines(): string[] {
+		return DEFAULT_FRAMES[state];
 	}
 
 	function render(): void {
 		if (!ctx?.hasUI) return;
+		const currentCtx = ctx;
 		if (!visible) {
-			ctx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
+			currentCtx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
 			lastSignature = "hidden";
 			return;
 		}
-		const lines = linesForCurrentState();
-		const signature = lines.join("\n");
-		if (signature === lastSignature) return;
-		lastSignature = signature;
-		ctx.ui.setWidget("pi-sprite", lines, { placement: "belowEditor" });
+		const generation = ++renderGeneration;
+		const pet = selectedPetId ? loadPet(selectedPetId) : undefined;
+		if (!pet) {
+			const lines = defaultLines();
+			const signature = lines.join("\n");
+			if (signature === lastSignature) return;
+			lastSignature = signature;
+			currentCtx.ui.setWidget("pi-sprite", lines, { placement: "belowEditor" });
+			return;
+		}
+		const spritePath = pet.manifest.sprites[state] ?? pet.manifest.sprites.idle;
+		lastSignature = `loading:${pet.id}:${state}:${spritePath ?? ""}`;
+		currentCtx.ui.setWidget(
+			"pi-sprite",
+			[`  ◕‿◕  ${pet.manifest.name}`, `pi-sprite · loading ${state}${spritePath ? ` · ${basename(spritePath)}` : ""}`],
+			{ placement: "belowEditor" },
+		);
+		void renderSpriteFrame(pet, state).then((frame) => {
+			if (generation !== renderGeneration || !visible || ctx !== currentCtx) return;
+			if (frame.signature === lastSignature) return;
+			lastSignature = frame.signature;
+			currentCtx.ui.setWidget("pi-sprite", frame.lines, { placement: "belowEditor" });
+		});
 	}
 
 	function persist(): void {
