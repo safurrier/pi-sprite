@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { statSync } from "node:fs";
 import { join } from "node:path";
+import { type Component, Container, getCapabilities, Image, Text } from "@earendil-works/pi-tui";
 import sharp from "sharp";
 import type { InstalledPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
@@ -7,9 +9,42 @@ import type { SpriteState } from "./manifest.ts";
 const RESET = "\u001b[0m";
 const MAX_COLUMNS = 24;
 const MAX_TEXT_ROWS = 8;
+const PETDEX_ATLAS_ROWS = 9;
+const PETDEX_ATLAS_COLS = 8;
+const PETDEX_FRAME_COUNTS = {
+	idle: 6,
+	runRight: 8,
+	runLeft: 8,
+	wave: 4,
+	jump: 5,
+	failed: 8,
+	waiting: 6,
+	running: 6,
+	review: 6,
+} as const;
+const STATE_TO_ATLAS_ROW: Record<SpriteState, { row: number; frames: number }> = {
+	idle: { row: 0, frames: PETDEX_FRAME_COUNTS.idle },
+	thinking: { row: 8, frames: PETDEX_FRAME_COUNTS.review },
+	working: { row: 7, frames: PETDEX_FRAME_COUNTS.running },
+	success: { row: 4, frames: PETDEX_FRAME_COUNTS.jump },
+	error: { row: 5, frames: PETDEX_FRAME_COUNTS.failed },
+};
 
-export interface RenderedSprite {
+export interface NativeSpriteFrame {
+	base64: string;
+	filename: string;
+	width: number;
+	height: number;
+}
+
+export interface RenderedSpriteFrame {
 	lines: string[];
+	signature: string;
+	native?: NativeSpriteFrame;
+}
+
+export interface RenderedSpriteAnimation {
+	frames: RenderedSpriteFrame[];
 	signature: string;
 }
 
@@ -44,48 +79,125 @@ function sourcePath(pet: InstalledPet, state: SpriteState): string | undefined {
 	return pet.manifest.sprites[state] ?? pet.manifest.sprites.idle;
 }
 
-async function imageForState(pet: InstalledPet, state: SpriteState): Promise<sharp.Sharp> {
-	const relative = sourcePath(pet, state);
-	if (!relative) throw new Error("missing sprite path");
-	const file = join(pet.dir, relative);
-	const image = sharp(file, { animated: false, limitInputPixels: 32 * 1024 * 1024 }).rotate();
-	const metadata = await image.metadata();
-	const frameWidth = pet.manifest.frame?.width;
-	const frameHeight = pet.manifest.frame?.height;
-	if (
-		frameWidth &&
-		frameHeight &&
-		metadata.width &&
-		metadata.height &&
-		metadata.width >= frameWidth &&
-		metadata.height >= frameHeight
-	) {
-		return image.extract({ left: 0, top: 0, width: frameWidth, height: frameHeight });
-	}
-	return image;
+function frameHash(parts: string[]): string {
+	return createHash("sha1").update(parts.join("\0")).digest("hex").slice(0, 12);
 }
 
-export async function renderSpriteFrame(pet: InstalledPet, state: SpriteState): Promise<RenderedSprite> {
+function frameRects(
+	state: SpriteState,
+	metadata: sharp.Metadata,
+	configuredFrame: { width?: number; height?: number } = {},
+	looksLikeSpritesheet = false,
+): Array<{ left: number; top: number; width: number; height: number; name: string }> {
+	const imageWidth = metadata.width ?? 0;
+	const imageHeight = metadata.height ?? 0;
+	const inferredAtlas =
+		looksLikeSpritesheet &&
+		imageWidth >= PETDEX_ATLAS_COLS &&
+		imageHeight >= PETDEX_ATLAS_ROWS &&
+		imageWidth % PETDEX_ATLAS_COLS === 0 &&
+		imageHeight % PETDEX_ATLAS_ROWS === 0;
+	const frameWidth = Math.floor(configuredFrame.width ?? (inferredAtlas ? imageWidth / PETDEX_ATLAS_COLS : imageWidth));
+	const frameHeight = Math.floor(
+		configuredFrame.height ?? (inferredAtlas ? imageHeight / PETDEX_ATLAS_ROWS : imageHeight),
+	);
+	if (frameWidth > 0 && frameHeight > 0 && imageWidth >= frameWidth && imageHeight >= frameHeight) {
+		const cols = Math.floor(imageWidth / frameWidth);
+		const rows = Math.floor(imageHeight / frameHeight);
+		if (cols >= PETDEX_ATLAS_COLS && rows >= PETDEX_ATLAS_ROWS) {
+			const mapping = STATE_TO_ATLAS_ROW[state];
+			return Array.from({ length: Math.min(mapping.frames, cols) }, (_, col) => ({
+				left: col * frameWidth,
+				top: mapping.row * frameHeight,
+				width: frameWidth,
+				height: frameHeight,
+				name: `${state}-${col}`,
+			}));
+		}
+		return Array.from({ length: Math.max(1, cols) }, (_, col) => ({
+			left: col * frameWidth,
+			top: 0,
+			width: frameWidth,
+			height: frameHeight,
+			name: `${state}-${col}`,
+		}));
+	}
+	return [{ left: 0, top: 0, width: imageWidth, height: imageHeight, name: state }];
+}
+
+async function renderRect(
+	file: string,
+	rect: { left: number; top: number; width: number; height: number; name: string },
+	label: string,
+	signatureParts: string[],
+): Promise<RenderedSpriteFrame> {
+	const extracted = sharp(file, { animated: false, limitInputPixels: 32 * 1024 * 1024 })
+		.rotate()
+		.extract({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
+	const png = await extracted.png().toBuffer();
+	const { data, info } = await sharp(png)
+		.resize({ width: MAX_COLUMNS, height: MAX_TEXT_ROWS * 2, fit: "inside", withoutEnlargement: true })
+		.ensureAlpha()
+		.raw()
+		.toBuffer({ resolveWithObject: true });
+	const art = pixelsToHalfBlocks(data, info.width, info.height);
+	if (!art.length) throw new Error("empty sprite frame");
+	return {
+		lines: [...art, label],
+		signature: frameHash([...signatureParts, rect.name, `${info.width}x${info.height}`]),
+		native: {
+			base64: png.toString("base64"),
+			filename: `${frameHash([...signatureParts, rect.name])}.png`,
+			width: rect.width,
+			height: rect.height,
+		},
+	};
+}
+
+export function supportsNativeSpriteImages(): boolean {
+	const protocol = getCapabilities().images;
+	return protocol === "kitty" || protocol === "iterm2";
+}
+
+export function buildNativeSpriteWidget(frame: NativeSpriteFrame, statusLine: string, imageId: number): Component {
+	const widget = new Container();
+	widget.addChild(
+		new Image(
+			frame.base64,
+			"image/png",
+			{ fallbackColor: (text) => text },
+			{ maxWidthCells: MAX_COLUMNS, maxHeightCells: MAX_TEXT_ROWS, filename: frame.filename, imageId },
+			{ widthPx: frame.width, heightPx: frame.height },
+		),
+	);
+	widget.addChild(new Text(statusLine, 1, 0));
+	return widget;
+}
+
+export async function renderSpriteAnimation(pet: InstalledPet, state: SpriteState): Promise<RenderedSpriteAnimation> {
 	const relative = sourcePath(pet, state) ?? "";
 	const file = relative ? join(pet.dir, relative) : "";
 	try {
 		const mtime = statSync(file).mtimeMs;
-		const image = await imageForState(pet, state);
-		const { data, info } = await image
-			.resize({ width: MAX_COLUMNS, height: MAX_TEXT_ROWS * 2, fit: "inside", withoutEnlargement: true })
-			.ensureAlpha()
-			.raw()
-			.toBuffer({ resolveWithObject: true });
-		const art = pixelsToHalfBlocks(data, info.width, info.height);
-		if (!art.length) throw new Error("empty sprite frame");
-		return {
-			lines: [...art, `pi-sprite · ${state} · ${pet.manifest.name}`],
-			signature: `${pet.id}:${state}:${relative}:${mtime}:${info.width}x${info.height}`,
-		};
+		const image = sharp(file, { animated: false, limitInputPixels: 32 * 1024 * 1024 }).rotate();
+		const metadata = await image.metadata();
+		const rects = frameRects(state, metadata, pet.manifest.frame, /spritesheet/i.test(relative)).filter(
+			(rect) => rect.width > 0 && rect.height > 0,
+		);
+		const label = `pi-sprite · ${state} · ${pet.manifest.name}`;
+		const signatureParts = [pet.id, state, relative, String(mtime)];
+		const frames = await Promise.all(rects.map((rect) => renderRect(file, rect, label, signatureParts)));
+		if (!frames.length) throw new Error("empty sprite animation");
+		return { frames, signature: frameHash(signatureParts) };
 	} catch {
-		return {
+		const fallback = {
 			lines: [`  ◕‿◕  ${pet.manifest.name}`, `pi-sprite · ${state}${relative ? ` · ${relative}` : ""}`],
 			signature: `${pet.id}:${state}:${relative}:fallback`,
 		};
+		return { frames: [fallback], signature: fallback.signature };
 	}
+}
+
+export async function renderSpriteFrame(pet: InstalledPet, state: SpriteState): Promise<RenderedSpriteFrame> {
+	return (await renderSpriteAnimation(pet, state)).frames[0]!;
 }

@@ -71,7 +71,7 @@ Minimal `pet.json`:
 }
 ```
 
-Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported for first-frame rendering. When `frame.width` and `frame.height` are present, `pi-sprite` crops the first spritesheet frame and renders it as compact terminal half-block art.
+Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprite` renders image-backed pets as compact terminal art, cycles multi-frame spritesheets, infers standard Petdex 8x9 atlases for `spritesheet.*`, and uses Pi TUI native images on Kitty/iTerm2-capable terminals with ANSI half-block fallback elsewhere.
 
 ### `/context`
 
@@ -143,6 +143,10 @@ Equivalent npm commands:
 ```bash
 npm run check
 npm run test:e2e
+PI_SPRITE_E2E_TUI=1 npm run test:e2e
+PI_SPRITE_E2E_MODEL=1 npm run test:e2e
+node tests/e2e/package-smoke.mjs --isolated
+node tests/e2e/package-smoke.mjs --full-config
 ```
 
 TUI smoke artifacts are written under:

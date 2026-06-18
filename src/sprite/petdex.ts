@@ -3,7 +3,11 @@ import { extname, join } from "node:path";
 import { type InstalledPet, importPetFolder, loadPet } from "./loader.ts";
 import { petsDir } from "./paths.ts";
 
-const PETDEX_MANIFEST_URL = "https://petdex.crafter.run/api/manifest";
+const DEFAULT_PETDEX_MANIFEST_URL = "https://petdex.crafter.run/api/manifest";
+
+function petdexManifestUrl(): string {
+	return process.env.PI_SPRITE_PETDEX_MANIFEST_URL || DEFAULT_PETDEX_MANIFEST_URL;
+}
 
 export interface GalleryPet {
 	id: string;
@@ -39,7 +43,7 @@ async function download(url: string): Promise<Buffer> {
 }
 
 async function manifestPets(): Promise<PetdexManifestPet[]> {
-	const res = await fetch(PETDEX_MANIFEST_URL, { headers: { accept: "application/json" } });
+	const res = await fetch(petdexManifestUrl(), { headers: { accept: "application/json" } });
 	if (!res.ok) throw new Error(`Petdex manifest fetch failed (${res.status})`);
 	const raw = (await res.json()) as { pets?: unknown[] };
 	if (!Array.isArray(raw.pets)) throw new Error("Petdex manifest response is invalid");

@@ -7,11 +7,15 @@ case "$scenario" in
   pet) slash='/pet show'; expected='pi-sprite' ;;
   render)
     slash='/pet show'
-    expected='E2E Render Pet'
+    expected='▀'
     ;;
   context)
     slash='/sprite:context'
     expected='Context Usage'
+    ;;
+  petdex)
+    slash='/pet install e2e-petdex-pet'
+    expected='▀'
     ;;
   btw)
     slash='/btw answer with exactly three words'
@@ -27,8 +31,13 @@ session_dir="$PWD/artifacts/e2e/session-${scenario}-$$"
 mkdir -p "$session_dir"
 if [[ "$scenario" == "render" ]]; then
   env_prefix="PI_OFFLINE=1 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/sprite-home")"
+elif [[ "$scenario" == "petdex" ]]; then
+  env_prefix="PI_OFFLINE=1 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/petdex-home")"
 else
   env_prefix="PI_OFFLINE=1"
+fi
+if [[ -n "${PI_SPRITE_PETDEX_MANIFEST_URL:-}" ]]; then
+  env_prefix="$env_prefix PI_SPRITE_PETDEX_MANIFEST_URL=$(printf %q "$PI_SPRITE_PETDEX_MANIFEST_URL")"
 fi
 command="cd $(printf %q "$PWD") && $env_prefix pi -e . --no-session --session-dir $(printf %q "$session_dir")"
 tmux new-session -d -s "$session" "$command"
@@ -68,6 +77,7 @@ if [[ "$slash" == *" "* ]]; then
   tmux send-keys -t "$session" -l " ${slash#* }"
 else
   tmux send-keys -t "$session" -l "$slash"
+  tmux send-keys -t "$session" Tab
 fi
 tmux send-keys -t "$session" Enter
 if ! wait_for "$expected" 120; then
