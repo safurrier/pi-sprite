@@ -26,6 +26,12 @@ export default function piSpriteExtension(pi: ExtensionAPI) {
 
 	sprite.registerCommands(pi);
 	registerContextCommand(pi);
-	registerRecapCommand(pi);
-	registerBtwCommands(pi);
+	registerRecapCommand(pi, {
+		setState: (state, options) => sprite.setState(state, options),
+		setRecapStatus: (status) => sprite.setRecapStatus(status),
+	});
+	registerBtwCommands(pi, {
+		setState: (state, options) => sprite.setState(state, options),
+		setBtwStatus: (status, count) => sprite.setBtwStatus(status, count),
+	});
 }

@@ -1,8 +1,17 @@
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { Container, matchesKey, Text } from "@earendil-works/pi-tui";
+import { matchesKey } from "@earendil-works/pi-tui";
+import type { SpriteState } from "../sprite/manifest.ts";
+import { type OverlaySection, renderOverlay } from "../ui/overlay.ts";
 
 const SYSTEM_PROMPT = `Create a compact coding-session recap. Output exactly these labels with concise values: Goal, State, Decisions, Files/commands, Next. Do not use markdown tables.`;
+
+type ActivityStatus = "idle" | "running" | "ready" | "error";
+
+interface RecapHooks {
+	setState?: (state: SpriteState, options?: { resetMs?: number }) => void;
+	setRecapStatus?: (status: ActivityStatus) => void;
+}
 
 function extractText(content: unknown): string {
 	if (typeof content === "string") return content;
@@ -23,25 +32,42 @@ function conversation(ctx: ExtensionCommandContext): string {
 	}
 	return lines.slice(-16).join("\n\n");
 }
+function recapSections(recap: string): OverlaySection[] {
+	const sections: OverlaySection[] = [];
+	let current: OverlaySection | undefined;
+	for (const rawLine of recap.split("\n")) {
+		const line = rawLine.trim();
+		const match = /^(Goal|State|Decisions|Files\/commands|Next):\s*(.*)$/iu.exec(line);
+		if (match) {
+			current = {
+				title: match[1],
+				body: match[2] || "—",
+				accent: match[1].toLowerCase() === "next" ? "success" : "accent",
+			};
+			sections.push(current);
+		} else if (line && current) {
+			current.body += `\n${line}`;
+		} else if (line) {
+			sections.push({ body: line });
+		}
+	}
+	return sections.length ? sections : [{ body: recap }];
+}
+
 async function showRecap(ctx: ExtensionCommandContext, recap: string): Promise<void> {
 	await ctx.ui.custom(
-		(_tui, theme, _kb, done) => {
-			const container = new Container();
-			container.addChild(new Text(theme.fg("accent", theme.bold("Session Recap")), 1, 0));
-			container.addChild(new Text(recap, 1, 1));
-			container.addChild(new Text(theme.fg("dim", "Press Enter or Esc to close"), 1, 0));
-			return {
-				render: (w: number) => container.render(w),
-				invalidate: () => container.invalidate(),
-				handleInput: (d: string) => {
-					if (matchesKey(d, "enter") || matchesKey(d, "escape")) done(undefined);
-				},
-			};
-		},
-		{ overlay: true, overlayOptions: { width: "70%", minWidth: 60, maxHeight: "80%" } },
+		(_tui, theme, _kb, done) => ({
+			render: (width: number) =>
+				renderOverlay("Session recap", recapSections(recap), "↵ close · esc close", width, theme),
+			invalidate: () => {},
+			handleInput: (data: string) => {
+				if (matchesKey(data, "enter") || matchesKey(data, "escape")) done(undefined);
+			},
+		}),
+		{ overlay: true, overlayOptions: { width: "70%", minWidth: 60, maxHeight: "74%" } },
 	);
 }
-export function registerRecapCommand(pi: ExtensionAPI) {
+export function registerRecapCommand(pi: ExtensionAPI, hooks: RecapHooks = {}) {
 	pi.registerCommand("recap", {
 		description: "Generate a compact session recap",
 		handler: async (_args: string, ctx: ExtensionCommandContext) => {
@@ -51,22 +77,36 @@ export function registerRecapCommand(pi: ExtensionAPI) {
 			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
 			if (!auth.ok || !auth.apiKey)
 				return ctx.ui.notify(auth.ok ? "No API key available for current model." : auth.error, "error");
-			const messages: Message[] = [
-				{ role: "user", content: [{ type: "text", text: `Current session:\n\n${text}` }], timestamp: Date.now() },
-			];
-			const response = await complete(
-				ctx.model,
-				{ systemPrompt: SYSTEM_PROMPT, messages },
-				{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 500 },
-			);
-			const recap = response.content
-				.filter((p): p is { type: "text"; text: string } => p.type === "text")
-				.map((p) => p.text)
-				.join("\n")
-				.trim();
-			if (!recap) return ctx.ui.notify("Recap generation returned no text.", "warning");
-			pi.appendEntry("pi-sprite:recap", { recap, timestamp: Date.now() });
-			await showRecap(ctx, recap);
+			hooks.setState?.("thinking");
+			hooks.setRecapStatus?.("running");
+			try {
+				const messages: Message[] = [
+					{ role: "user", content: [{ type: "text", text: `Current session:\n\n${text}` }], timestamp: Date.now() },
+				];
+				const response = await complete(
+					ctx.model,
+					{ systemPrompt: SYSTEM_PROMPT, messages },
+					{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 500 },
+				);
+				const recap = response.content
+					.filter((p): p is { type: "text"; text: string } => p.type === "text")
+					.map((p) => p.text)
+					.join("\n")
+					.trim();
+				if (!recap) {
+					hooks.setState?.("error", { resetMs: 2500 });
+					hooks.setRecapStatus?.("error");
+					return ctx.ui.notify("Recap generation returned no text.", "warning");
+				}
+				pi.appendEntry("pi-sprite:recap", { recap, timestamp: Date.now() });
+				hooks.setState?.("success", { resetMs: 1800 });
+				hooks.setRecapStatus?.("ready");
+				await showRecap(ctx, recap);
+			} catch (error) {
+				hooks.setState?.("error", { resetMs: 2500 });
+				hooks.setRecapStatus?.("error");
+				throw error;
+			}
 		},
 	});
 }

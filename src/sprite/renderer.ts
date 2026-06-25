@@ -3,22 +3,38 @@ import { statSync } from "node:fs";
 import { join } from "node:path";
 import {
 	type Component,
-	Container,
 	deleteAllKittyImages,
 	deleteKittyImage,
 	encodeKitty,
 	getCapabilities,
 	getCellDimensions,
 	Image,
-	Text,
+	visibleWidth,
 } from "@earendil-works/pi-tui";
 import sharp from "sharp";
 import type { InstalledPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 
 const RESET = "\u001b[0m";
-const MAX_COLUMNS = 24;
-const MAX_TEXT_ROWS = 8;
+const SIZE_PRESETS = {
+	tiny: { columns: 12, rows: 3 },
+	small: { columns: 16, rows: 4 },
+	medium: { columns: 20, rows: 6 },
+	large: { columns: 24, rows: 8 },
+} as const;
+
+export type SpriteSize = keyof typeof SIZE_PRESETS;
+export type SpriteAlign = "left" | "right";
+
+export interface SpriteRenderOptions {
+	size?: SpriteSize;
+	label?: boolean;
+	align?: SpriteAlign;
+}
+
+function preset(options: SpriteRenderOptions = {}): { columns: number; rows: number } {
+	return SIZE_PRESETS[options.size ?? "small"];
+}
 const PETDEX_ATLAS_ROWS = 9;
 const PETDEX_ATLAS_COLS = 8;
 const PETDEX_FRAME_COUNTS = {
@@ -144,15 +160,17 @@ async function renderRect(
 	rect: { left: number; top: number; width: number; height: number; name: string },
 	label: string,
 	signatureParts: string[],
+	options: SpriteRenderOptions = {},
 ): Promise<RenderedSpriteFrame> {
+	const size = preset(options);
 	const extracted = sharp(file, { animated: false, limitInputPixels: 32 * 1024 * 1024 })
 		.rotate()
 		.extract({ left: rect.left, top: rect.top, width: rect.width, height: rect.height });
 	const png = await extracted.png().toBuffer();
 	const { data, info } = await sharp(png)
 		.resize({
-			width: MAX_COLUMNS,
-			height: MAX_TEXT_ROWS * 2,
+			width: size.columns,
+			height: size.rows * 2,
 			fit: "inside",
 			withoutEnlargement: true,
 			kernel: sharp.kernel.nearest,
@@ -163,8 +181,13 @@ async function renderRect(
 	const art = pixelsToHalfBlocks(data, info.width, info.height);
 	if (!art.length) throw new Error("empty sprite frame");
 	return {
-		lines: [...art, label],
-		signature: frameHash([...signatureParts, rect.name, `${info.width}x${info.height}`]),
+		lines: options.label ? [...art, label] : art,
+		signature: frameHash([
+			...signatureParts,
+			rect.name,
+			`${info.width}x${info.height}`,
+			options.label ? "label" : "no-label",
+		]),
 		native: {
 			base64: png.toString("base64"),
 			filename: `${frameHash([...signatureParts, rect.name])}.png`,
@@ -216,14 +239,23 @@ function wrapTmuxPassthrough(sequence: string): string {
 	return `${TMUX_PASSTHROUGH_PREFIX}${sequence.replaceAll("\u001b", "\u001b\u001b")}${TMUX_PASSTHROUGH_SUFFIX}`;
 }
 
-function nativeImageCellSize(frame: NativeSpriteFrame, maxWidth: number): { columns: number; rows: number } {
+function nativeImageCellSize(
+	frame: NativeSpriteFrame,
+	maxWidth: number,
+	maxRows: number,
+): { columns: number; rows: number } {
 	const cell = getCellDimensions();
 	const widthScale = (maxWidth * cell.widthPx) / Math.max(1, frame.width);
-	const heightScale = (MAX_TEXT_ROWS * cell.heightPx) / Math.max(1, frame.height);
+	const heightScale = (maxRows * cell.heightPx) / Math.max(1, frame.height);
 	const scale = Math.min(widthScale, heightScale);
 	const columns = Math.ceil((frame.width * scale) / cell.widthPx);
 	const rows = Math.ceil((frame.height * scale) / cell.heightPx);
-	return { columns: Math.max(1, Math.min(maxWidth, columns)), rows: Math.max(1, Math.min(MAX_TEXT_ROWS, rows)) };
+	return { columns: Math.max(1, Math.min(maxWidth, columns)), rows: Math.max(1, Math.min(maxRows, rows)) };
+}
+
+function alignLine(line: string, width: number, align: SpriteAlign): string {
+	if (align !== "right") return line;
+	return `${" ".repeat(Math.max(0, width - visibleWidth(line) - 1))}${line}`;
 }
 
 export function clearNativeSpriteImage(imageId: number): string[] {
@@ -243,13 +275,15 @@ class KittySpriteImage implements Component {
 		private readonly frame: NativeSpriteFrame,
 		private readonly imageId: number,
 		private readonly wrapForTmux: boolean,
+		private readonly options: SpriteRenderOptions,
 	) {}
 
 	invalidate(): void {}
 
 	render(width: number): string[] {
-		const maxWidth = Math.max(1, Math.min(width - 2, MAX_COLUMNS));
-		const size = nativeImageCellSize(this.frame, maxWidth);
+		const configured = preset(this.options);
+		const maxWidth = Math.max(1, Math.min(width - 2, configured.columns));
+		const size = nativeImageCellSize(this.frame, maxWidth, configured.rows);
 		const deleteSequence = deleteKittyImage(this.imageId);
 		const drawSequence = encodeKitty(this.frame.base64, {
 			columns: size.columns,
@@ -264,31 +298,82 @@ class KittySpriteImage implements Component {
 	}
 }
 
+class TextSpriteWidget implements Component {
+	constructor(
+		private readonly lines: string[],
+		private readonly options: SpriteRenderOptions,
+	) {}
+
+	invalidate(): void {}
+
+	render(width: number): string[] {
+		return this.lines.map((line) => alignLine(line, width, this.options.align ?? "left"));
+	}
+}
+
+class NativeSpriteWidget implements Component {
+	constructor(
+		private readonly image: Component,
+		private readonly statusLine: string,
+		private readonly reservedColumns: number,
+		private readonly options: SpriteRenderOptions,
+	) {}
+
+	invalidate(): void {
+		this.image.invalidate();
+	}
+
+	render(width: number): string[] {
+		const align = this.options.align ?? "left";
+		const pad = align === "right" ? " ".repeat(Math.max(0, width - this.reservedColumns - 1)) : "";
+		const imageLines = this.image.render(width).map((line, index) => (index === 0 ? `${pad}${line}` : line));
+		if (!this.options.label) return imageLines;
+		return [...imageLines, alignLine(this.statusLine, width, align)];
+	}
+}
+
+export function formatTextSpriteLines(
+	lines: string[],
+	options: SpriteRenderOptions = {},
+	width = process.stdout.columns || 80,
+): string[] {
+	return lines.map((line) => alignLine(line, width, options.align ?? "left"));
+}
+
+export function buildTextSpriteWidget(lines: string[], options: SpriteRenderOptions = {}): Component {
+	return new TextSpriteWidget(lines, options);
+}
+
 export function supportsNativeSpriteImages(): boolean {
 	return spriteImageProtocol() !== null;
 }
 
-export function buildNativeSpriteWidget(frame: NativeSpriteFrame, statusLine: string, imageId: number): Component {
-	const widget = new Container();
+export function buildNativeSpriteWidget(
+	frame: NativeSpriteFrame,
+	statusLine: string,
+	imageId: number,
+	options: SpriteRenderOptions = {},
+): Component {
 	const protocol = spriteImageProtocol();
-	if (protocol === "kitty" && getCapabilities().images !== "kitty") {
-		widget.addChild(new KittySpriteImage(frame, imageId, isTmux()));
-	} else {
-		widget.addChild(
-			new Image(
-				frame.base64,
-				"image/png",
-				{ fallbackColor: (text) => text },
-				{ maxWidthCells: MAX_COLUMNS, maxHeightCells: MAX_TEXT_ROWS, filename: frame.filename, imageId },
-				{ widthPx: frame.width, heightPx: frame.height },
-			),
-		);
-	}
-	widget.addChild(new Text(statusLine, 1, 0));
-	return widget;
+	const size = preset(options);
+	const image =
+		protocol === "kitty"
+			? new KittySpriteImage(frame, imageId, isTmux(), options)
+			: new Image(
+					frame.base64,
+					"image/png",
+					{ fallbackColor: (text) => text },
+					{ maxWidthCells: size.columns, maxHeightCells: size.rows, filename: frame.filename, imageId },
+					{ widthPx: frame.width, heightPx: frame.height },
+				);
+	return new NativeSpriteWidget(image, statusLine, size.columns, options);
 }
 
-export async function renderSpriteAnimation(pet: InstalledPet, state: SpriteState): Promise<RenderedSpriteAnimation> {
+export async function renderSpriteAnimation(
+	pet: InstalledPet,
+	state: SpriteState,
+	options: SpriteRenderOptions = {},
+): Promise<RenderedSpriteAnimation> {
 	const relative = sourcePath(pet, state) ?? "";
 	const file = relative ? join(pet.dir, relative) : "";
 	try {
@@ -300,18 +385,24 @@ export async function renderSpriteAnimation(pet: InstalledPet, state: SpriteStat
 		);
 		const label = `pi-sprite · ${state} · ${pet.manifest.name}`;
 		const signatureParts = [pet.id, state, relative, String(mtime)];
-		const frames = await Promise.all(rects.map((rect) => renderRect(file, rect, label, signatureParts)));
+		const frames = await Promise.all(rects.map((rect) => renderRect(file, rect, label, signatureParts, options)));
 		if (!frames.length) throw new Error("empty sprite animation");
 		return { frames, signature: frameHash(signatureParts) };
 	} catch {
+		const fallbackLines = [`  ◕‿◕  ${pet.manifest.name}`];
+		if (options.label) fallbackLines.push(`pi-sprite · ${state}${relative ? ` · ${relative}` : ""}`);
 		const fallback = {
-			lines: [`  ◕‿◕  ${pet.manifest.name}`, `pi-sprite · ${state}${relative ? ` · ${relative}` : ""}`],
-			signature: `${pet.id}:${state}:${relative}:fallback`,
+			lines: fallbackLines,
+			signature: `${pet.id}:${state}:${relative}:fallback:${options.label ? "label" : "no-label"}`,
 		};
 		return { frames: [fallback], signature: fallback.signature };
 	}
 }
 
-export async function renderSpriteFrame(pet: InstalledPet, state: SpriteState): Promise<RenderedSpriteFrame> {
-	return (await renderSpriteAnimation(pet, state)).frames[0]!;
+export async function renderSpriteFrame(
+	pet: InstalledPet,
+	state: SpriteState,
+	options: SpriteRenderOptions = {},
+): Promise<RenderedSpriteFrame> {
+	return (await renderSpriteAnimation(pet, state, options)).frames[0]!;
 }
