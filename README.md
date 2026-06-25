@@ -73,16 +73,24 @@ Minimal `pet.json`:
 
 Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprite` renders image-backed pets as compact terminal art, cycles multi-frame spritesheets, infers standard Petdex 8x9 atlases for `spritesheet.*`, and uses Pi TUI native images on Kitty/iTerm2-capable terminals with ANSI half-block fallback elsewhere.
 
-Ghostty exposes the Kitty image protocol. Inside tmux, `pi-sprite` can render native images through tmux passthrough when it detects Ghostty/Kitty/WezTerm as the outer terminal. If native image passthrough misbehaves, disable it with:
+Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
 
-```bash
-export PI_SPRITE_NATIVE_IMAGES=0
-```
+Inside tmux, native terminal images are disabled by default. Kitty/Ghostty graphics are terminal-level placements, not tmux text cells, so they can stick across panes, popups, copy-mode, or restarted Pi sessions. The ANSI fallback is the default tmux-safe renderer.
 
-For tmux, make sure passthrough is enabled in tmux config:
+If you want to experiment with native tmux passthrough anyway, opt in explicitly and make sure tmux allows passthrough:
 
 ```tmux
 set -g allow-passthrough on
+```
+
+```bash
+export PI_SPRITE_NATIVE_IMAGES=kitty
+```
+
+If native image passthrough misbehaves, return to the safe fallback with:
+
+```bash
+export PI_SPRITE_NATIVE_IMAGES=0
 ```
 
 ### `/context`

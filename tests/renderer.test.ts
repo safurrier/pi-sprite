@@ -48,6 +48,10 @@ test("renders image pets as terminal half-block frames", async () => {
 });
 
 test("detects native sprite image capability and builds a native widget", () => {
+	const previousTmux = process.env.TMUX;
+	const previousTerm = process.env.TERM;
+	delete process.env.TMUX;
+	process.env.TERM = "xterm-256color";
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
 	try {
 		assert.equal(supportsNativeSpriteImages(), true);
@@ -58,11 +62,15 @@ test("detects native sprite image capability and builds a native widget", () => 
 		);
 		assert.ok(widget.render(20).length > 0);
 	} finally {
+		if (previousTmux === undefined) delete process.env.TMUX;
+		else process.env.TMUX = previousTmux;
+		if (previousTerm === undefined) delete process.env.TERM;
+		else process.env.TERM = previousTerm;
 		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
 	}
 });
 
-test("supports Ghostty native sprite images through tmux passthrough", () => {
+test("does not auto-enable native sprite images inside tmux", () => {
 	const previousTmux = process.env.TMUX;
 	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
 	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
@@ -71,6 +79,27 @@ test("supports Ghostty native sprite images through tmux passthrough", () => {
 		process.env.TMUX = "/tmp/tmux-501/default,123,0";
 		process.env.GHOSTTY_RESOURCES_DIR = "/Applications/Ghostty.app/Contents/Resources/ghostty";
 		delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		assert.equal(supportsNativeSpriteImages(), false);
+	} finally {
+		if (previousTmux === undefined) delete process.env.TMUX;
+		else process.env.TMUX = previousTmux;
+		if (previousGhostty === undefined) delete process.env.GHOSTTY_RESOURCES_DIR;
+		else process.env.GHOSTTY_RESOURCES_DIR = previousGhostty;
+		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	}
+});
+
+test("allows explicit native sprite image opt-in inside tmux", () => {
+	const previousTmux = process.env.TMUX;
+	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
+	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
+	setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+	try {
+		process.env.TMUX = "/tmp/tmux-501/default,123,0";
+		process.env.GHOSTTY_RESOURCES_DIR = "/Applications/Ghostty.app/Contents/Resources/ghostty";
+		process.env.PI_SPRITE_NATIVE_IMAGES = "kitty";
 		assert.equal(supportsNativeSpriteImages(), true);
 		const widget = buildNativeSpriteWidget(
 			{ base64: Buffer.from("not-a-real-png").toString("base64"), filename: "x.png", width: 1, height: 1 },

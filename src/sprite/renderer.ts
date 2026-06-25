@@ -182,28 +182,13 @@ function isTmux(): boolean {
 	return Boolean(process.env.TMUX || term.startsWith("tmux") || term.startsWith("screen"));
 }
 
-function outerTerminalSupportsKittyImages(): boolean {
-	const termProgram = process.env.TERM_PROGRAM?.toLowerCase() ?? "";
-	const terminalEmulator = process.env.TERMINAL_EMULATOR?.toLowerCase() ?? "";
-	return Boolean(
-		process.env.KITTY_WINDOW_ID ||
-			process.env.GHOSTTY_RESOURCES_DIR ||
-			process.env.WEZTERM_PANE ||
-			termProgram === "kitty" ||
-			termProgram === "ghostty" ||
-			termProgram === "wezterm" ||
-			terminalEmulator === "ghostty" ||
-			terminalEmulator === "wezterm",
-	);
-}
-
 function spriteImageProtocol(): "kitty" | "iterm2" | null {
 	const setting = explicitNativeImageSetting();
 	if (DISABLE_NATIVE_IMAGE_VALUES.has(setting)) return null;
 	if (KITTY_NATIVE_IMAGE_VALUES.has(setting)) return "kitty";
+	if (isTmux()) return null;
 	const protocol = getCapabilities().images;
 	if (protocol === "kitty" || protocol === "iterm2") return protocol;
-	if (isTmux() && outerTerminalSupportsKittyImages()) return "kitty";
 	return null;
 }
 
