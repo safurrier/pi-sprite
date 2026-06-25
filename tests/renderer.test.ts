@@ -8,6 +8,7 @@ import sharp from "sharp";
 import type { InstalledPet } from "../src/sprite/loader.ts";
 import {
 	buildNativeSpriteWidget,
+	buildTextSpriteWidget,
 	clearAllNativeSpriteImages,
 	clearNativeSpriteImage,
 	renderSpriteAnimation,
@@ -41,11 +42,18 @@ async function withPet<T>(fn: (pet: InstalledPet) => Promise<T>): Promise<T> {
 
 test("renders image pets as terminal half-block frames", async () => {
 	await withPet(async (pet) => {
-		const frame = await renderSpriteFrame(pet, "idle");
-		assert.ok(frame.lines.join("\n").includes("\u001b[38;2"));
-		assert.match(frame.lines.join("\n"), /[▀▄]/u);
-		assert.match(frame.lines.at(-1) ?? "", /Render Pet/u);
+		const compact = await renderSpriteFrame(pet, "idle");
+		assert.ok(compact.lines.join("\n").includes("\u001b[38;2"));
+		assert.match(compact.lines.join("\n"), /[▀▄]/u);
+		assert.doesNotMatch(compact.lines.join("\n"), /Render Pet/u);
+		const labeled = await renderSpriteFrame(pet, "idle", { label: true });
+		assert.match(labeled.lines.at(-1) ?? "", /Render Pet/u);
 	});
+});
+
+test("right-aligns text sprite widgets", () => {
+	const lines = buildTextSpriteWidget(["pet"], { align: "right" }).render(10);
+	assert.equal(lines[0], "      pet");
 });
 
 test("detects native sprite image capability and builds a native widget", () => {
@@ -60,8 +68,12 @@ test("detects native sprite image capability and builds a native widget", () => 
 			{ base64: Buffer.from("not-a-real-png").toString("base64"), filename: "x.png", width: 1, height: 1 },
 			"status",
 			123,
+			{ align: "right" },
 		);
-		assert.ok(widget.render(20).length > 0);
+		const rendered = widget.render(20);
+		assert.ok(rendered.length > 0);
+		assert.ok((rendered[0] ?? "").startsWith("   "));
+		assert.ok((rendered[0] ?? "").includes("\u001b_G"));
 		assert.ok(clearAllNativeSpriteImages().join("\n").includes("a=d,d=A"));
 	} finally {
 		if (previousTmux === undefined) delete process.env.TMUX;
@@ -171,6 +183,7 @@ test("renders configured multi-frame Codex/Petdex-style spritesheets", async () 
 				},
 			},
 			"idle",
+			{ label: true },
 		);
 		assert.equal(animation.frames.length, 2);
 		assert.match(animation.frames[0]!.lines.join("\n"), /Sheet Pet/u);

@@ -36,6 +36,9 @@ pi install git:github.com/safurrier/pi-sprite
 /pet import <path>
 /pet hide
 /pet show
+/pet size tiny|small|medium|large
+/pet label on|off
+/pet align left|right
 ```
 
 Pets live under:
@@ -72,6 +75,8 @@ Minimal `pet.json`:
 ```
 
 Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprite` renders image-backed pets as compact terminal art, cycles multi-frame spritesheets, infers standard Petdex 8x9 atlases for `spritesheet.*`, and uses Pi TUI native images on Kitty/iTerm2-capable terminals with ANSI half-block fallback elsewhere.
+
+By default, the sprite is compact, right-aligned, and label-free so it stays out of the main text flow. The pet/state label lives in Pi's footer status line instead. Use `/pet size ...`, `/pet label on`, or `/pet align left` if you want a larger or more explicit widget.
 
 Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
 
@@ -111,7 +116,7 @@ Shows a Claude-Code-style TUI overlay with:
 /recap
 ```
 
-Generates a manual structured recap:
+Generates a manual structured recap in a higher-contrast popup and updates the Pi footer while it is running/ready:
 
 ```text
 Goal: ...
@@ -131,7 +136,7 @@ Next: ...
 /btw:summarize
 ```
 
-BTW answers side questions outside the main thread. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
+BTW answers side questions outside the main thread. The footer shows BTW running/ready state, and the answer appears in a compact popup. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
 
 ## Non-features
 

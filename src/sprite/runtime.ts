@@ -10,22 +10,41 @@ import {
 	buildNativeSpriteWidget,
 	clearAllNativeSpriteImages,
 	clearNativeSpriteImage,
+	formatTextSpriteLines,
 	renderSpriteAnimation,
+	type SpriteAlign,
+	type SpriteRenderOptions,
+	type SpriteSize,
 	supportsNativeSpriteImages,
 } from "./renderer.ts";
+
+type ActivityStatus = "idle" | "running" | "ready" | "error";
 
 interface SavedState {
 	selectedPetId?: string;
 	visible?: boolean;
+	size?: SpriteSize;
+	label?: boolean;
+	align?: SpriteAlign;
 }
 
-const DEFAULT_FRAMES: Record<SpriteState, string[]> = {
-	idle: ["  ◕‿◕  ", "pi-sprite · idle"],
-	thinking: ["  ◔_◔  ", "pi-sprite · thinking"],
-	working: ["  ◕_◕⌨ ", "pi-sprite · working"],
-	success: ["  ◕‿◕✦ ", "pi-sprite · success"],
-	error: ["  ◕︵◕  ", "pi-sprite · error"],
+interface CompanionActivity {
+	btwCount: number;
+	btwStatus: ActivityStatus;
+	recapStatus: ActivityStatus;
+}
+
+const DEFAULT_FRAMES: Record<SpriteState, string> = {
+	idle: "  ◕‿◕  ",
+	thinking: "  ◔_◔  ",
+	working: "  ◕_◕⌨ ",
+	success: "  ◕‿◕✦ ",
+	error: "  ◕︵◕  ",
 };
+
+const DEFAULT_SIZE: SpriteSize = "small";
+const DEFAULT_ALIGN: SpriteAlign = "right";
+const DEFAULT_LABEL = false;
 
 function loadSaved(): SavedState {
 	try {
@@ -50,6 +69,10 @@ export function createSpriteRuntime() {
 	let state: SpriteState = "idle";
 	let selectedPetId = "";
 	let visible = true;
+	let size: SpriteSize = DEFAULT_SIZE;
+	let label = DEFAULT_LABEL;
+	let align: SpriteAlign = DEFAULT_ALIGN;
+	let activity: CompanionActivity = { btwCount: 0, btwStatus: "idle", recapStatus: "idle" };
 	let resetTimer: ReturnType<typeof setTimeout> | undefined;
 	let clearWidgetTimer: ReturnType<typeof setTimeout> | undefined;
 	let animationTimer: ReturnType<typeof setInterval> | undefined;
@@ -63,8 +86,36 @@ export function createSpriteRuntime() {
 		return selectedPetId ? (loadPet(selectedPetId)?.manifest.name ?? selectedPetId) : "default";
 	}
 
+	function renderOptions(): SpriteRenderOptions {
+		return { size, label, align };
+	}
+
 	function defaultLines(): string[] {
-		return DEFAULT_FRAMES[state];
+		const lines = [DEFAULT_FRAMES[state]];
+		if (label) lines.push(`pi-sprite · ${state}`);
+		return lines;
+	}
+
+	function activityLabel(name: "btw" | "recap", status: ActivityStatus, count = 0): string | undefined {
+		if (status === "running") return `${name}…`;
+		if (status === "error") return `${name} error`;
+		if (name === "btw" && count > 0) return status === "ready" ? `btw ${count} ready` : `btw ${count}`;
+		if (name === "recap" && status === "ready") return "recap ready";
+		return undefined;
+	}
+
+	function updateFooter(currentCtx = ctx): void {
+		if (!currentCtx?.hasUI) return;
+		if (!visible) {
+			currentCtx.ui.setStatus("pi-sprite", undefined);
+			return;
+		}
+		const parts = [`🐾 ${selectedName()} ${state}`];
+		const btw = activityLabel("btw", activity.btwStatus, activity.btwCount);
+		const recap = activityLabel("recap", activity.recapStatus);
+		if (btw) parts.push(btw);
+		if (recap) parts.push(recap);
+		currentCtx.ui.setStatus("pi-sprite", parts.join(" · "));
 	}
 
 	function stopAnimation(): void {
@@ -89,6 +140,7 @@ export function createSpriteRuntime() {
 	function render(): void {
 		if (!ctx?.hasUI) return;
 		const currentCtx = ctx;
+		updateFooter(currentCtx);
 		let startupClearLines: string[] = [];
 		if (!clearedStaleNativeImages) {
 			clearedStaleNativeImages = true;
@@ -111,36 +163,43 @@ export function createSpriteRuntime() {
 			const signature = lines.join("\n");
 			if (signature === lastSignature && !startupClearLines.length) return;
 			lastSignature = signature;
-			currentCtx.ui.setWidget("pi-sprite", withStartupClear(lines), { placement: "belowEditor" });
+			currentCtx.ui.setWidget("pi-sprite", formatTextSpriteLines(withStartupClear(lines), renderOptions()), {
+				placement: "belowEditor",
+			});
 			return;
 		}
 		const spritePath = pet.manifest.sprites[state] ?? pet.manifest.sprites.idle;
 		lastSignature = `loading:${pet.id}:${state}:${spritePath ?? ""}`;
-		currentCtx.ui.setWidget(
-			"pi-sprite",
-			withStartupClear([
-				`  ◕‿◕  ${pet.manifest.name}`,
-				`pi-sprite · loading ${state}${spritePath ? ` · ${basename(spritePath)}` : ""}`,
-			]),
-			{ placement: "belowEditor" },
-		);
-		void renderSpriteAnimation(pet, state).then((animation) => {
+		const loadingLines = [`  ◕‿◕  ${pet.manifest.name}`];
+		if (label) loadingLines.push(`pi-sprite · loading ${state}${spritePath ? ` · ${basename(spritePath)}` : ""}`);
+		currentCtx.ui.setWidget("pi-sprite", formatTextSpriteLines(withStartupClear(loadingLines), renderOptions()), {
+			placement: "belowEditor",
+		});
+		void renderSpriteAnimation(pet, state, renderOptions()).then((animation) => {
 			if (generation !== renderGeneration || !visible || ctx !== currentCtx) return;
 			stopAnimation();
 			frameIndex = 0;
 			const applyFrame = () => {
 				const frame = animation.frames[frameIndex % animation.frames.length]!;
-				const frameSignature = `${animation.signature}:${frameIndex % animation.frames.length}:${supportsNativeSpriteImages() ? "native" : "ansi"}`;
+				const frameSignature = `${animation.signature}:${frameIndex % animation.frames.length}:${supportsNativeSpriteImages() ? "native" : "ansi"}:${size}:${label}:${align}`;
 				if (frameSignature === lastSignature) return;
 				lastSignature = frameSignature;
 				if (frame.native && supportsNativeSpriteImages()) {
 					currentCtx.ui.setWidget(
 						"pi-sprite",
-						() => buildNativeSpriteWidget(frame.native!, `pi-sprite · ${state} · ${pet.manifest.name}`, nativeImageId),
+						() =>
+							buildNativeSpriteWidget(
+								frame.native!,
+								`pi-sprite · ${state} · ${pet.manifest.name}`,
+								nativeImageId,
+								renderOptions(),
+							),
 						{ placement: "belowEditor" },
 					);
 				} else {
-					currentCtx.ui.setWidget("pi-sprite", frame.lines, { placement: "belowEditor" });
+					currentCtx.ui.setWidget("pi-sprite", formatTextSpriteLines(frame.lines, renderOptions()), {
+						placement: "belowEditor",
+					});
 				}
 			};
 			applyFrame();
@@ -155,7 +214,7 @@ export function createSpriteRuntime() {
 	}
 
 	function persist(): void {
-		saveSaved({ selectedPetId, visible });
+		saveSaved({ selectedPetId, visible, size, label, align });
 	}
 
 	function activatePet(id: string): void {
@@ -190,6 +249,9 @@ export function createSpriteRuntime() {
 			const saved = loadSaved();
 			selectedPetId = saved.selectedPetId ?? selectedPetId;
 			visible = saved.visible ?? true;
+			size = saved.size ?? size;
+			label = saved.label ?? label;
+			align = saved.align ?? align;
 			state = "idle";
 			render();
 		},
@@ -200,19 +262,30 @@ export function createSpriteRuntime() {
 			render();
 			if (options.resetMs) resetTimer = setTimeout(() => this.setState("idle"), options.resetMs);
 		},
+		setBtwStatus(status: ActivityStatus, count = activity.btwCount) {
+			activity = { ...activity, btwStatus: status, btwCount: count };
+			updateFooter();
+		},
+		setRecapStatus(status: ActivityStatus) {
+			activity = { ...activity, recapStatus: status };
+			updateFooter();
+		},
 		shutdown() {
 			if (resetTimer) clearTimeout(resetTimer);
 			if (clearWidgetTimer) clearTimeout(clearWidgetTimer);
 			resetTimer = undefined;
 			clearWidgetTimer = undefined;
 			stopAnimation();
-			if (ctx?.hasUI) clearNativeWidget(ctx, { removeAfter: false });
+			if (ctx?.hasUI) {
+				ctx.ui.setStatus("pi-sprite", undefined);
+				clearNativeWidget(ctx, { removeAfter: false });
+			}
 			persist();
 		},
 		registerCommands(pi: ExtensionAPI) {
 			pi.registerCommand("pet", {
 				description:
-					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | clear-native",
+					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | size <tiny|small|medium|large> | label <on|off> | align <left|right> | clear-native",
 				handler: async (args: string, commandCtx: ExtensionContext) => {
 					ctx = commandCtx;
 					const [cmd = "", ...rest] = args.trim().split(/\s+/u).filter(Boolean);
@@ -220,7 +293,7 @@ export function createSpriteRuntime() {
 					switch (cmd || "status") {
 						case "status":
 							commandCtx.ui.notify(
-								`pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}`,
+								`pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}; size=${size}; label=${label ? "on" : "off"}; align=${align}`,
 								"info",
 							);
 							break;
@@ -304,6 +377,35 @@ export function createSpriteRuntime() {
 							render();
 							commandCtx.ui.notify("pi-sprite shown.", "info");
 							break;
+						case "size": {
+							if (!["tiny", "small", "medium", "large"].includes(value)) {
+								throw new Error("Usage: /pet size <tiny|small|medium|large>");
+							}
+							size = value as SpriteSize;
+							persist();
+							lastSignature = "";
+							render();
+							commandCtx.ui.notify(`pi-sprite size set to ${size}.`, "info");
+							break;
+						}
+						case "label": {
+							if (value !== "on" && value !== "off") throw new Error("Usage: /pet label <on|off>");
+							label = value === "on";
+							persist();
+							lastSignature = "";
+							render();
+							commandCtx.ui.notify(`pi-sprite label ${label ? "shown" : "hidden"}.`, "info");
+							break;
+						}
+						case "align": {
+							if (value !== "left" && value !== "right") throw new Error("Usage: /pet align <left|right>");
+							align = value;
+							persist();
+							lastSignature = "";
+							render();
+							commandCtx.ui.notify(`pi-sprite aligned ${align}.`, "info");
+							break;
+						}
 						case "clear-native": {
 							const clearLines = clearAllNativeSpriteImages();
 							if (clearLines.length) commandCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
@@ -313,7 +415,7 @@ export function createSpriteRuntime() {
 						}
 						default:
 							commandCtx.ui.notify(
-								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|clear-native]",
+								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|size <tiny|small|medium|large>|label <on|off>|align <left|right>|clear-native]",
 								"info",
 							);
 					}
