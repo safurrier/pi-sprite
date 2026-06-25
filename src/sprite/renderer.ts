@@ -4,6 +4,7 @@ import { join } from "node:path";
 import {
 	type Component,
 	Container,
+	deleteKittyImage,
 	encodeKitty,
 	getCapabilities,
 	getCellDimensions,
@@ -220,6 +221,12 @@ function nativeImageCellSize(frame: NativeSpriteFrame, maxWidth: number): { colu
 	return { columns: Math.max(1, Math.min(maxWidth, columns)), rows: Math.max(1, Math.min(MAX_TEXT_ROWS, rows)) };
 }
 
+export function clearNativeSpriteImage(imageId: number): string[] {
+	if (spriteImageProtocol() !== "kitty") return [];
+	const sequence = deleteKittyImage(imageId);
+	return [isTmux() ? wrapTmuxPassthrough(sequence) : sequence];
+}
+
 class KittySpriteImage implements Component {
 	constructor(
 		private readonly frame: NativeSpriteFrame,
@@ -232,12 +239,14 @@ class KittySpriteImage implements Component {
 	render(width: number): string[] {
 		const maxWidth = Math.max(1, Math.min(width - 2, MAX_COLUMNS));
 		const size = nativeImageCellSize(this.frame, maxWidth);
-		const sequence = encodeKitty(this.frame.base64, {
+		const deleteSequence = deleteKittyImage(this.imageId);
+		const drawSequence = encodeKitty(this.frame.base64, {
 			columns: size.columns,
 			rows: size.rows,
 			imageId: this.imageId,
 			moveCursor: false,
 		});
+		const sequence = `${deleteSequence}${drawSequence}`;
 		const lines = [this.wrapForTmux ? wrapTmuxPassthrough(sequence) : sequence];
 		for (let i = 0; i < size.rows - 1; i++) lines.push("");
 		return lines;

@@ -8,6 +8,7 @@ import sharp from "sharp";
 import type { InstalledPet } from "../src/sprite/loader.ts";
 import {
 	buildNativeSpriteWidget,
+	clearNativeSpriteImage,
 	renderSpriteAnimation,
 	renderSpriteFrame,
 	supportsNativeSpriteImages,
@@ -78,6 +79,8 @@ test("supports Ghostty native sprite images through tmux passthrough", () => {
 		);
 		const rendered = widget.render(20).join("\n");
 		assert.ok(rendered.includes("\u001bPtmux;\u001b\u001b_G"));
+		assert.ok(rendered.includes("a=d,d=I,i=123"));
+		assert.ok(clearNativeSpriteImage(123).join("\n").includes("a=d,d=I,i=123"));
 	} finally {
 		if (previousTmux === undefined) delete process.env.TMUX;
 		else process.env.TMUX = previousTmux;
