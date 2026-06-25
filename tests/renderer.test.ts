@@ -61,6 +61,47 @@ test("detects native sprite image capability and builds a native widget", () => 
 	}
 });
 
+test("supports Ghostty native sprite images through tmux passthrough", () => {
+	const previousTmux = process.env.TMUX;
+	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
+	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
+	setCapabilities({ images: null, trueColor: true, hyperlinks: false });
+	try {
+		process.env.TMUX = "/tmp/tmux-501/default,123,0";
+		process.env.GHOSTTY_RESOURCES_DIR = "/Applications/Ghostty.app/Contents/Resources/ghostty";
+		delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		assert.equal(supportsNativeSpriteImages(), true);
+		const widget = buildNativeSpriteWidget(
+			{ base64: Buffer.from("not-a-real-png").toString("base64"), filename: "x.png", width: 1, height: 1 },
+			"status",
+			123,
+		);
+		const rendered = widget.render(20).join("\n");
+		assert.ok(rendered.includes("\u001bPtmux;\u001b\u001b_G"));
+	} finally {
+		if (previousTmux === undefined) delete process.env.TMUX;
+		else process.env.TMUX = previousTmux;
+		if (previousGhostty === undefined) delete process.env.GHOSTTY_RESOURCES_DIR;
+		else process.env.GHOSTTY_RESOURCES_DIR = previousGhostty;
+		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	}
+});
+
+test("native sprite images can be disabled explicitly", () => {
+	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+	try {
+		process.env.PI_SPRITE_NATIVE_IMAGES = "0";
+		assert.equal(supportsNativeSpriteImages(), false);
+	} finally {
+		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	}
+});
+
 test("renders configured multi-frame Codex/Petdex-style spritesheets", async () => {
 	const dir = mkdtempSync(join(tmpdir(), "pi-sprite-sheet-"));
 	try {

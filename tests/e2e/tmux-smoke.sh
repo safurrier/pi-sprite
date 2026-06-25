@@ -30,9 +30,9 @@ esac
 session_dir="$PWD/artifacts/e2e/session-${scenario}-$$"
 mkdir -p "$session_dir"
 if [[ "$scenario" == "render" ]]; then
-  env_prefix="PI_OFFLINE=1 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/sprite-home")"
+  env_prefix="PI_OFFLINE=1 PI_SPRITE_NATIVE_IMAGES=0 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/sprite-home")"
 elif [[ "$scenario" == "petdex" ]]; then
-  env_prefix="PI_OFFLINE=1 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/petdex-home")"
+  env_prefix="PI_OFFLINE=1 PI_SPRITE_NATIVE_IMAGES=0 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/petdex-home")"
 else
   env_prefix="PI_OFFLINE=1"
 fi
