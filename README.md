@@ -75,19 +75,13 @@ Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprit
 
 Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
 
-Inside tmux, native terminal images are disabled by default. Kitty/Ghostty graphics are terminal-level placements, not tmux text cells, so they can stick across panes, popups, copy-mode, or restarted Pi sessions. The ANSI fallback is the default tmux-safe renderer.
-
-If you want to experiment with native tmux passthrough anyway, opt in explicitly and make sure tmux allows passthrough:
+Inside tmux, Kitty/Ghostty graphics are terminal-level placements, not tmux text cells. `pi-sprite` still enables native images in known Kitty-capable tmux terminals because that is the useful Ghostty workflow, but it treats tmux as managed mode: use a stable per-pane image id and delete that image id before drawing. Make sure tmux allows passthrough:
 
 ```tmux
 set -g allow-passthrough on
 ```
 
-```bash
-export PI_SPRITE_NATIVE_IMAGES=kitty
-```
-
-If native image passthrough misbehaves, return to the safe fallback with:
+If old native placements from earlier versions are still stuck, run `/pet clear-native` once, then `/pet show`. That command intentionally asks the terminal to delete visible Kitty images. If native image passthrough keeps misbehaving, force the ANSI fallback with:
 
 ```bash
 export PI_SPRITE_NATIVE_IMAGES=0

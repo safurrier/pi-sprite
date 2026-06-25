@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -7,6 +8,7 @@ import { spriteHome, statePath } from "./paths.ts";
 import { installPetdexPet, listPetdexPets } from "./petdex.ts";
 import {
 	buildNativeSpriteWidget,
+	clearAllNativeSpriteImages,
 	clearNativeSpriteImage,
 	renderSpriteAnimation,
 	supportsNativeSpriteImages,
@@ -37,6 +39,12 @@ function saveSaved(state: SavedState): void {
 	writeFileSync(statePath(), `${JSON.stringify(state, null, 2)}\n`);
 }
 
+function stableNativeImageId(): number {
+	const seed = ["pi-sprite", process.env.TMUX_PANE ?? "no-pane", process.cwd()].join(":");
+	const digest = createHash("sha1").update(seed).digest();
+	return digest.readUInt32BE(0) & 0x7fffffff || 1;
+}
+
 export function createSpriteRuntime() {
 	let ctx: ExtensionContext | undefined;
 	let state: SpriteState = "idle";
@@ -48,7 +56,8 @@ export function createSpriteRuntime() {
 	let lastSignature = "";
 	let renderGeneration = 0;
 	let frameIndex = 0;
-	const nativeImageId = Math.floor(Math.random() * 0x7fffffff) + 1;
+	let clearedStaleNativeImages = false;
+	const nativeImageId = stableNativeImageId();
 
 	function selectedName(): string {
 		return selectedPetId ? (loadPet(selectedPetId)?.manifest.name ?? selectedPetId) : "default";
@@ -80,6 +89,13 @@ export function createSpriteRuntime() {
 	function render(): void {
 		if (!ctx?.hasUI) return;
 		const currentCtx = ctx;
+		let startupClearLines: string[] = [];
+		if (!clearedStaleNativeImages) {
+			clearedStaleNativeImages = true;
+			startupClearLines = clearNativeSpriteImage(nativeImageId);
+		}
+		const withStartupClear = (lines: string[]): string[] =>
+			startupClearLines.length ? [...startupClearLines, ...lines] : lines;
 		if (!visible) {
 			stopAnimation();
 			clearNativeWidget(currentCtx);
@@ -93,16 +109,19 @@ export function createSpriteRuntime() {
 		if (!pet) {
 			const lines = defaultLines();
 			const signature = lines.join("\n");
-			if (signature === lastSignature) return;
+			if (signature === lastSignature && !startupClearLines.length) return;
 			lastSignature = signature;
-			currentCtx.ui.setWidget("pi-sprite", lines, { placement: "belowEditor" });
+			currentCtx.ui.setWidget("pi-sprite", withStartupClear(lines), { placement: "belowEditor" });
 			return;
 		}
 		const spritePath = pet.manifest.sprites[state] ?? pet.manifest.sprites.idle;
 		lastSignature = `loading:${pet.id}:${state}:${spritePath ?? ""}`;
 		currentCtx.ui.setWidget(
 			"pi-sprite",
-			[`  ◕‿◕  ${pet.manifest.name}`, `pi-sprite · loading ${state}${spritePath ? ` · ${basename(spritePath)}` : ""}`],
+			withStartupClear([
+				`  ◕‿◕  ${pet.manifest.name}`,
+				`pi-sprite · loading ${state}${spritePath ? ` · ${basename(spritePath)}` : ""}`,
+			]),
 			{ placement: "belowEditor" },
 		);
 		void renderSpriteAnimation(pet, state).then((animation) => {
@@ -193,7 +212,7 @@ export function createSpriteRuntime() {
 		registerCommands(pi: ExtensionAPI) {
 			pi.registerCommand("pet", {
 				description:
-					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show",
+					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | clear-native",
 				handler: async (args: string, commandCtx: ExtensionContext) => {
 					ctx = commandCtx;
 					const [cmd = "", ...rest] = args.trim().split(/\s+/u).filter(Boolean);
@@ -285,9 +304,16 @@ export function createSpriteRuntime() {
 							render();
 							commandCtx.ui.notify("pi-sprite shown.", "info");
 							break;
+						case "clear-native": {
+							const clearLines = clearAllNativeSpriteImages();
+							if (clearLines.length) commandCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
+							lastSignature = "";
+							commandCtx.ui.notify("Requested native terminal image cleanup. /pet show redraws the sprite.", "info");
+							break;
+						}
 						default:
 							commandCtx.ui.notify(
-								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show]",
+								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|clear-native]",
 								"info",
 							);
 					}

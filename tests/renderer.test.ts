@@ -8,6 +8,7 @@ import sharp from "sharp";
 import type { InstalledPet } from "../src/sprite/loader.ts";
 import {
 	buildNativeSpriteWidget,
+	clearAllNativeSpriteImages,
 	clearNativeSpriteImage,
 	renderSpriteAnimation,
 	renderSpriteFrame,
@@ -61,6 +62,7 @@ test("detects native sprite image capability and builds a native widget", () => 
 			123,
 		);
 		assert.ok(widget.render(20).length > 0);
+		assert.ok(clearAllNativeSpriteImages().join("\n").includes("a=d,d=A"));
 	} finally {
 		if (previousTmux === undefined) delete process.env.TMUX;
 		else process.env.TMUX = previousTmux;
@@ -70,7 +72,7 @@ test("detects native sprite image capability and builds a native widget", () => 
 	}
 });
 
-test("does not auto-enable native sprite images inside tmux", () => {
+test("auto-enables native sprite images inside known Kitty-capable tmux terminals", () => {
 	const previousTmux = process.env.TMUX;
 	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
 	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
@@ -79,7 +81,8 @@ test("does not auto-enable native sprite images inside tmux", () => {
 		process.env.TMUX = "/tmp/tmux-501/default,123,0";
 		process.env.GHOSTTY_RESOURCES_DIR = "/Applications/Ghostty.app/Contents/Resources/ghostty";
 		delete process.env.PI_SPRITE_NATIVE_IMAGES;
-		assert.equal(supportsNativeSpriteImages(), false);
+		assert.equal(supportsNativeSpriteImages(), true);
+		assert.ok(clearAllNativeSpriteImages().join("\n").includes("a=d,d=A"));
 	} finally {
 		if (previousTmux === undefined) delete process.env.TMUX;
 		else process.env.TMUX = previousTmux;
@@ -121,12 +124,14 @@ test("allows explicit native sprite image opt-in inside tmux", () => {
 	}
 });
 
-test("native sprite images can be disabled explicitly", () => {
+test("native sprite images can be disabled explicitly without blocking cleanup", () => {
 	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
 	try {
 		process.env.PI_SPRITE_NATIVE_IMAGES = "0";
 		assert.equal(supportsNativeSpriteImages(), false);
+		assert.ok(clearNativeSpriteImage(123).join("\n").includes("a=d,d=I,i=123"));
+		assert.ok(clearAllNativeSpriteImages().join("\n").includes("a=d,d=A"));
 	} finally {
 		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
 		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
