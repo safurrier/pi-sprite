@@ -5,7 +5,12 @@ import { importPetFolder, importPetZip, listPets, loadPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 import { spriteHome, statePath } from "./paths.ts";
 import { installPetdexPet, listPetdexPets } from "./petdex.ts";
-import { buildNativeSpriteWidget, renderSpriteAnimation, supportsNativeSpriteImages } from "./renderer.ts";
+import {
+	buildNativeSpriteWidget,
+	clearNativeSpriteImage,
+	renderSpriteAnimation,
+	supportsNativeSpriteImages,
+} from "./renderer.ts";
 
 interface SavedState {
 	selectedPetId?: string;
@@ -38,11 +43,12 @@ export function createSpriteRuntime() {
 	let selectedPetId = "";
 	let visible = true;
 	let resetTimer: ReturnType<typeof setTimeout> | undefined;
+	let clearWidgetTimer: ReturnType<typeof setTimeout> | undefined;
 	let animationTimer: ReturnType<typeof setInterval> | undefined;
 	let lastSignature = "";
 	let renderGeneration = 0;
 	let frameIndex = 0;
-	let nativeImageId = 4100;
+	const nativeImageId = Math.floor(Math.random() * 0x7fffffff) + 1;
 
 	function selectedName(): string {
 		return selectedPetId ? (loadPet(selectedPetId)?.manifest.name ?? selectedPetId) : "default";
@@ -57,15 +63,31 @@ export function createSpriteRuntime() {
 		animationTimer = undefined;
 	}
 
+	function clearNativeWidget(currentCtx: ExtensionContext, options: { removeAfter?: boolean } = {}): void {
+		if (clearWidgetTimer) clearTimeout(clearWidgetTimer);
+		const clearLines = clearNativeSpriteImage(nativeImageId);
+		if (!clearLines.length) {
+			currentCtx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
+			return;
+		}
+		currentCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
+		if (options.removeAfter === false) return;
+		clearWidgetTimer = setTimeout(() => {
+			if (ctx === currentCtx) currentCtx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
+		}, 50);
+	}
+
 	function render(): void {
 		if (!ctx?.hasUI) return;
 		const currentCtx = ctx;
 		if (!visible) {
 			stopAnimation();
-			currentCtx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
+			clearNativeWidget(currentCtx);
 			lastSignature = "hidden";
 			return;
 		}
+		if (clearWidgetTimer) clearTimeout(clearWidgetTimer);
+		clearWidgetTimer = undefined;
 		const generation = ++renderGeneration;
 		const pet = selectedPetId ? loadPet(selectedPetId) : undefined;
 		if (!pet) {
@@ -104,7 +126,6 @@ export function createSpriteRuntime() {
 			};
 			applyFrame();
 			if (animation.frames.length > 1) {
-				nativeImageId++;
 				animationTimer = setInterval(() => {
 					if (!visible || ctx !== currentCtx) return stopAnimation();
 					frameIndex++;
@@ -162,8 +183,11 @@ export function createSpriteRuntime() {
 		},
 		shutdown() {
 			if (resetTimer) clearTimeout(resetTimer);
+			if (clearWidgetTimer) clearTimeout(clearWidgetTimer);
 			resetTimer = undefined;
+			clearWidgetTimer = undefined;
 			stopAnimation();
+			if (ctx?.hasUI) clearNativeWidget(ctx, { removeAfter: false });
 			persist();
 		},
 		registerCommands(pi: ExtensionAPI) {
