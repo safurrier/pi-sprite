@@ -83,7 +83,7 @@ Turn status is on by default. After each agent turn, `pi-sprite` runs a tiny no-
 
 Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
 
-Inside tmux, Kitty/Ghostty graphics are terminal-level placements, not tmux text cells. `pi-sprite` still enables native images in known Kitty-capable tmux terminals because that is the useful Ghostty workflow, but it treats tmux as managed mode: use a stable per-pane image id and delete that image id before drawing. Make sure tmux allows passthrough:
+Inside tmux, Kitty/Ghostty graphics are terminal-level placements, not tmux text cells. `pi-sprite` still enables native images in known Kitty-capable tmux terminals because that is the useful Ghostty workflow, but it treats tmux as managed mode: use stable per-pane image ids, clear stale ids on startup, and draw the next animation frame before deleting the previous one. Make sure tmux allows passthrough:
 
 ```tmux
 set -g allow-passthrough on

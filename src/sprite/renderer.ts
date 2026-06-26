@@ -59,6 +59,7 @@ const DISABLE_NATIVE_IMAGE_VALUES = new Set(["0", "false", "off", "none", "ansi"
 const KITTY_NATIVE_IMAGE_VALUES = new Set(["1", "true", "on", "kitty"]);
 const TMUX_PASSTHROUGH_PREFIX = "\u001bPtmux;";
 const TMUX_PASSTHROUGH_SUFFIX = "\u001b\\";
+const TUI_IMAGE_CLEANUP_GUARD_SEQUENCE = "\u001b_Ga=d,d=I,i=0,q=2\u001b\\";
 
 export interface NativeSpriteFrame {
 	base64: string;
@@ -77,6 +78,9 @@ export interface RenderedSpriteAnimation {
 	frames: RenderedSpriteFrame[];
 	signature: string;
 }
+
+const MAX_RENDER_CACHE_ENTRIES = 48;
+const renderCache = new Map<string, RenderedSpriteAnimation>();
 
 function color(r: number, g: number, b: number, target: "fg" | "bg"): string {
 	return `\u001b[${target === "fg" ? 38 : 48};2;${r};${g};${b}m`;
@@ -264,6 +268,10 @@ export function clearNativeSpriteImage(imageId: number): string[] {
 	return [isTmux() ? wrapTmuxPassthrough(sequence) : sequence];
 }
 
+export function clearNativeSpriteImages(imageIds: number[]): string[] {
+	return imageIds.flatMap((imageId) => clearNativeSpriteImage(imageId));
+}
+
 export function clearAllNativeSpriteImages(): string[] {
 	if (!terminalSupportsKittyControl()) return [];
 	const sequence = deleteAllKittyImages();
@@ -276,6 +284,7 @@ class KittySpriteImage implements Component {
 		private readonly imageId: number,
 		private readonly wrapForTmux: boolean,
 		private readonly options: SpriteRenderOptions,
+		private readonly previousImageId?: number,
 	) {}
 
 	invalidate(): void {}
@@ -284,14 +293,15 @@ class KittySpriteImage implements Component {
 		const configured = preset(this.options);
 		const maxWidth = Math.max(1, Math.min(width - 2, configured.columns));
 		const size = nativeImageCellSize(this.frame, maxWidth, configured.rows);
-		const deleteSequence = deleteKittyImage(this.imageId);
 		const drawSequence = encodeKitty(this.frame.base64, {
 			columns: size.columns,
 			rows: size.rows,
 			imageId: this.imageId,
 			moveCursor: false,
 		});
-		const sequence = `${deleteSequence}${drawSequence}`;
+		const deletePreviousSequence =
+			this.previousImageId && this.previousImageId !== this.imageId ? deleteKittyImage(this.previousImageId) : "";
+		const sequence = `${TUI_IMAGE_CLEANUP_GUARD_SEQUENCE}${drawSequence}${deletePreviousSequence}`;
 		const lines = [this.wrapForTmux ? wrapTmuxPassthrough(sequence) : sequence];
 		for (let i = 0; i < size.rows - 1; i++) lines.push("");
 		return lines;
@@ -340,6 +350,16 @@ export function formatTextSpriteLines(
 	return lines.map((line) => alignLine(line, width, options.align ?? "left"));
 }
 
+export function formatNativeSpritePlaceholderLines(
+	prefixLines: string[] = [],
+	options: SpriteRenderOptions = {},
+	width = process.stdout.columns || 80,
+): string[] {
+	const rows = preset(options).rows + (options.label ? 1 : 0);
+	const blank = " ".repeat(Math.max(1, width - 1));
+	return [...prefixLines, ...Array.from({ length: rows }, () => blank)];
+}
+
 export function buildTextSpriteWidget(lines: string[], options: SpriteRenderOptions = {}): Component {
 	return new TextSpriteWidget(lines, options);
 }
@@ -353,12 +373,13 @@ export function buildNativeSpriteWidget(
 	statusLine: string,
 	imageId: number,
 	options: SpriteRenderOptions = {},
+	previousImageId?: number,
 ): Component {
 	const protocol = spriteImageProtocol();
 	const size = preset(options);
 	const image =
 		protocol === "kitty"
-			? new KittySpriteImage(frame, imageId, isTmux(), options)
+			? new KittySpriteImage(frame, imageId, isTmux(), options, previousImageId)
 			: new Image(
 					frame.base64,
 					"image/png",
@@ -378,6 +399,20 @@ export async function renderSpriteAnimation(
 	const file = relative ? join(pet.dir, relative) : "";
 	try {
 		const mtime = statSync(file).mtimeMs;
+		const cacheKey = [
+			pet.id,
+			pet.manifest.name,
+			pet.dir,
+			state,
+			relative,
+			String(mtime),
+			JSON.stringify(pet.manifest.frame ?? {}),
+			options.size ?? "small",
+			options.label ? "label" : "no-label",
+			options.align ?? "left",
+		].join("\0");
+		const cached = renderCache.get(cacheKey);
+		if (cached) return cached;
 		const image = sharp(file, { animated: false, limitInputPixels: 32 * 1024 * 1024 }).rotate();
 		const metadata = await image.metadata();
 		const rects = frameRects(state, metadata, pet.manifest.frame, /spritesheet/i.test(relative)).filter(
@@ -387,7 +422,10 @@ export async function renderSpriteAnimation(
 		const signatureParts = [pet.id, state, relative, String(mtime)];
 		const frames = await Promise.all(rects.map((rect) => renderRect(file, rect, label, signatureParts, options)));
 		if (!frames.length) throw new Error("empty sprite animation");
-		return { frames, signature: frameHash(signatureParts) };
+		const animation = { frames, signature: frameHash(signatureParts) };
+		renderCache.set(cacheKey, animation);
+		if (renderCache.size > MAX_RENDER_CACHE_ENTRIES) renderCache.delete(renderCache.keys().next().value!);
+		return animation;
 	} catch {
 		const fallbackLines = [`  ◕‿◕  ${pet.manifest.name}`];
 		if (options.label) fallbackLines.push(`pi-sprite · ${state}${relative ? ` · ${relative}` : ""}`);

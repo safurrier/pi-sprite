@@ -11,6 +11,8 @@ import {
 	buildTextSpriteWidget,
 	clearAllNativeSpriteImages,
 	clearNativeSpriteImage,
+	clearNativeSpriteImages,
+	formatNativeSpritePlaceholderLines,
 	renderSpriteAnimation,
 	renderSpriteFrame,
 	supportsNativeSpriteImages,
@@ -123,8 +125,10 @@ test("allows explicit native sprite image opt-in inside tmux", () => {
 		);
 		const rendered = widget.render(20).join("\n");
 		assert.ok(rendered.includes("\u001bPtmux;\u001b\u001b_G"));
-		assert.ok(rendered.includes("a=d,d=I,i=123"));
+		assert.match(rendered, /a=d,d=I,i=0/u);
+		assert.doesNotMatch(rendered, /a=d,d=I,i=123/u);
 		assert.ok(clearNativeSpriteImage(123).join("\n").includes("a=d,d=I,i=123"));
+		assert.equal(clearNativeSpriteImages([123, 124]).length, 2);
 	} finally {
 		if (previousTmux === undefined) delete process.env.TMUX;
 		else process.env.TMUX = previousTmux;
@@ -134,6 +138,38 @@ test("allows explicit native sprite image opt-in inside tmux", () => {
 		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
 		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
 	}
+});
+
+test("native sprite widget deletes the previous frame after drawing the next frame", () => {
+	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+	try {
+		delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		const widget = buildNativeSpriteWidget(
+			{ base64: Buffer.from("not-a-real-png").toString("base64"), filename: "x.png", width: 1, height: 1 },
+			"status",
+			124,
+			{},
+			123,
+		);
+		const rendered = widget.render(20).join("\n");
+		const guardIndex = rendered.indexOf("a=d,d=I,i=0");
+		const drawIndex = rendered.indexOf("a=T");
+		const deleteIndex = rendered.indexOf("a=d,d=I,i=123");
+		assert.ok(guardIndex >= 0);
+		assert.ok(drawIndex > guardIndex);
+		assert.ok(deleteIndex > drawIndex);
+		assert.doesNotMatch(rendered, /a=d,d=I,i=124/u);
+	} finally {
+		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	}
+});
+
+test("native placeholder reserves label row", () => {
+	assert.equal(formatNativeSpritePlaceholderLines([], { size: "small" }).length, 4);
+	assert.equal(formatNativeSpritePlaceholderLines([], { size: "small", label: true }).length, 5);
 });
 
 test("native sprite images can be disabled explicitly without blocking cleanup", () => {
@@ -171,22 +207,28 @@ test("renders configured multi-frame Codex/Petdex-style spritesheets", async () 
 			])
 			.webp()
 			.toFile(join(dir, "spritesheet.webp"));
-		const animation = await renderSpriteAnimation(
-			{
+		const pet = {
+			id: "sheet-pet",
+			dir,
+			manifest: {
 				id: "sheet-pet",
-				dir,
-				manifest: {
-					id: "sheet-pet",
-					name: "Sheet Pet",
-					sprites: { idle: "spritesheet.webp" },
-					frame: { width: 4, height: 4 },
-				},
+				name: "Sheet Pet",
+				sprites: { idle: "spritesheet.webp" },
+				frame: { width: 4, height: 4 },
 			},
+		};
+		const animation = await renderSpriteAnimation(pet, "idle", { label: true });
+		const cachedAnimation = await renderSpriteAnimation(pet, "idle", { label: true });
+		const renamedAnimation = await renderSpriteAnimation(
+			{ ...pet, manifest: { ...pet.manifest, name: "Renamed Sheet Pet" } },
 			"idle",
 			{ label: true },
 		);
+		assert.equal(animation, cachedAnimation);
+		assert.notEqual(animation, renamedAnimation);
 		assert.equal(animation.frames.length, 2);
 		assert.match(animation.frames[0]!.lines.join("\n"), /Sheet Pet/u);
+		assert.match(renamedAnimation.frames[0]!.lines.join("\n"), /Renamed Sheet Pet/u);
 	} finally {
 		rmSync(dir, { recursive: true, force: true });
 	}
