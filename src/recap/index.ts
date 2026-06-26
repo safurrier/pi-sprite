@@ -1,9 +1,8 @@
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { SpriteState } from "../sprite/manifest.ts";
-import { createScrollableSpeechBubble, type OverlaySection, type SpriteBubblePlacement } from "../ui/overlay.ts";
-
-const SYSTEM_PROMPT = `Create a compact coding-session recap. Output exactly these labels with concise values: Goal, State, Decisions, Files/commands, Next. Do not use markdown tables.`;
+import { createScrollableSpeechBubble, type SpriteBubblePlacement } from "../ui/overlay.ts";
+import { recapSections, SYSTEM_PROMPT } from "./format.ts";
 
 type ActivityStatus = "idle" | "running" | "ready" | "error";
 
@@ -33,28 +32,6 @@ function conversation(ctx: ExtensionCommandContext): string {
 	}
 	return lines.slice(-16).join("\n\n");
 }
-function recapSections(recap: string): OverlaySection[] {
-	const sections: OverlaySection[] = [];
-	let current: OverlaySection | undefined;
-	for (const rawLine of recap.split("\n")) {
-		const line = rawLine.trim();
-		const match = /^(Goal|State|Decisions|Files\/commands|Next):\s*(.*)$/iu.exec(line);
-		if (match) {
-			current = {
-				title: match[1],
-				body: match[2] || "—",
-				accent: match[1].toLowerCase() === "next" ? "success" : "accent",
-			};
-			sections.push(current);
-		} else if (line && current) {
-			current.body += `\n${line}`;
-		} else if (line) {
-			sections.push({ body: line });
-		}
-	}
-	return sections.length ? sections : [{ body: recap }];
-}
-
 async function showRecap(
 	ctx: ExtensionCommandContext,
 	recap: string,
