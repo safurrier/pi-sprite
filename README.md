@@ -116,7 +116,7 @@ Shows a Claude-Code-style TUI overlay with:
 /recap
 ```
 
-Generates a manual structured recap in a higher-contrast popup and updates the Pi footer while it is running/ready:
+Generates a manual structured recap in a higher-contrast speech bubble anchored near the sprite and updates the Pi footer while it is running/ready. Use ↑/↓, j/k, space/d, or u to scroll longer recaps:
 
 ```text
 Goal: ...
@@ -136,7 +136,7 @@ Next: ...
 /btw:summarize
 ```
 
-BTW answers side questions outside the main thread. The footer shows BTW running/ready state, and the answer appears in a compact popup. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
+BTW answers side questions outside the main thread. The footer shows BTW running/ready state, and the answer appears in a compact speech bubble that points toward the sprite. Use ↑/↓, j/k, space/d, or u to scroll longer answers. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
 
 ## Non-features
 

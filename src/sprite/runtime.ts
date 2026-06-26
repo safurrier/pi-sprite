@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { SpriteBubblePlacement } from "../ui/overlay.ts";
 import { importPetFolder, importPetZip, listPets, loadPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 import { spriteHome, statePath } from "./paths.ts";
@@ -116,6 +117,18 @@ export function createSpriteRuntime() {
 		if (btw) parts.push(btw);
 		if (recap) parts.push(recap);
 		currentCtx.ui.setStatus("pi-sprite", parts.join(" · "));
+	}
+
+	function spriteBubbleBottomMargin(): number {
+		const base = { tiny: 4, small: 6, medium: 8, large: 10 }[size];
+		return base + (label ? 1 : 0);
+	}
+
+	function bubblePlacement(): SpriteBubblePlacement {
+		if (!visible) return { anchor: "center", tail: "none", margin: {} };
+		if (align === "left")
+			return { anchor: "bottom-left", tail: "bottom-left", margin: { left: 2, bottom: spriteBubbleBottomMargin() } };
+		return { anchor: "bottom-right", tail: "bottom-right", margin: { right: 2, bottom: spriteBubbleBottomMargin() } };
 	}
 
 	function stopAnimation(): void {
@@ -269,6 +282,12 @@ export function createSpriteRuntime() {
 		setRecapStatus(status: ActivityStatus) {
 			activity = { ...activity, recapStatus: status };
 			updateFooter();
+		},
+		getBubblePlacement() {
+			return bubblePlacement();
+		},
+		getSpriteName() {
+			return selectedName();
 		},
 		shutdown() {
 			if (resetTimer) clearTimeout(resetTimer);

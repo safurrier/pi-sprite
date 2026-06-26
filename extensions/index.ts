@@ -29,9 +29,13 @@ export default function piSpriteExtension(pi: ExtensionAPI) {
 	registerRecapCommand(pi, {
 		setState: (state, options) => sprite.setState(state, options),
 		setRecapStatus: (status) => sprite.setRecapStatus(status),
+		getBubblePlacement: () => sprite.getBubblePlacement(),
+		getSpriteName: () => sprite.getSpriteName(),
 	});
 	registerBtwCommands(pi, {
 		setState: (state, options) => sprite.setState(state, options),
 		setBtwStatus: (status, count) => sprite.setBtwStatus(status, count),
+		getBubblePlacement: () => sprite.getBubblePlacement(),
+		getSpriteName: () => sprite.getSpriteName(),
 	});
 }
