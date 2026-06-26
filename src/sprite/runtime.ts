@@ -29,6 +29,7 @@ interface SavedState {
 	label?: boolean;
 	align?: SpriteAlign;
 	turnStatusEnabled?: boolean;
+	turnStatusConfigured?: boolean;
 }
 
 interface CompanionActivity {
@@ -48,6 +49,7 @@ const DEFAULT_FRAMES: Record<SpriteState, string> = {
 const DEFAULT_SIZE: SpriteSize = "small";
 const DEFAULT_ALIGN: SpriteAlign = "right";
 const DEFAULT_LABEL = false;
+const DEFAULT_TURN_STATUS_ENABLED = true;
 
 function loadSaved(): SavedState {
 	try {
@@ -75,7 +77,8 @@ export function createSpriteRuntime() {
 	let size: SpriteSize = DEFAULT_SIZE;
 	let label = DEFAULT_LABEL;
 	let align: SpriteAlign = DEFAULT_ALIGN;
-	let turnStatusEnabled = false;
+	let turnStatusEnabled = DEFAULT_TURN_STATUS_ENABLED;
+	let turnStatusConfigured = false;
 	let turnStatus: TurnStatus | "pending" | undefined;
 	let activity: CompanionActivity = { btwCount: 0, btwStatus: "idle", recapStatus: "idle" };
 	let resetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -234,7 +237,7 @@ export function createSpriteRuntime() {
 	}
 
 	function persist(): void {
-		saveSaved({ selectedPetId, visible, size, label, align, turnStatusEnabled });
+		saveSaved({ selectedPetId, visible, size, label, align, turnStatusEnabled, turnStatusConfigured });
 	}
 
 	function activatePet(id: string): void {
@@ -272,7 +275,10 @@ export function createSpriteRuntime() {
 			size = saved.size ?? size;
 			label = saved.label ?? label;
 			align = saved.align ?? align;
-			turnStatusEnabled = saved.turnStatusEnabled ?? turnStatusEnabled;
+			turnStatusConfigured = saved.turnStatusConfigured ?? false;
+			turnStatusEnabled = turnStatusConfigured
+				? (saved.turnStatusEnabled ?? DEFAULT_TURN_STATUS_ENABLED)
+				: DEFAULT_TURN_STATUS_ENABLED;
 			state = "idle";
 			render();
 		},
@@ -460,6 +466,7 @@ export function createSpriteRuntime() {
 								commandCtx.ui.notify("Cleared pi-sprite turn status.", "info");
 								break;
 							}
+							turnStatusConfigured = true;
 							turnStatusEnabled = value === "on";
 							if (!turnStatusEnabled) turnStatus = undefined;
 							persist();

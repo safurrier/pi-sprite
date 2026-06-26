@@ -18,8 +18,8 @@ case "$scenario" in
     expected='side thread'
     ;;
   turn-status)
-    slash='/pet turn-status on'
-    expected='turn status enabled'
+    slash='/pet status'
+    expected='turn-status=on'
     ;;
   petdex)
     slash='/pet install e2e-petdex-pet'
@@ -41,6 +41,12 @@ if [[ "$scenario" == "render" ]]; then
   env_prefix="PI_OFFLINE=1 PI_SPRITE_NATIVE_IMAGES=0 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/sprite-home")"
 elif [[ "$scenario" == "petdex" ]]; then
   env_prefix="PI_OFFLINE=1 PI_SPRITE_NATIVE_IMAGES=0 PI_SPRITE_HOME=$(printf %q "$PWD/artifacts/e2e/petdex-home")"
+elif [[ "$scenario" == "turn-status" ]]; then
+  turn_status_home="$PWD/artifacts/e2e/turn-status-home-$session"
+  rm -rf "$turn_status_home"
+  mkdir -p "$turn_status_home"
+  printf '{"turnStatusEnabled":false}\n' > "$turn_status_home/state.json"
+  env_prefix="PI_OFFLINE=1 PI_SPRITE_HOME=$(printf %q "$turn_status_home")"
 else
   env_prefix="PI_OFFLINE=1"
 fi

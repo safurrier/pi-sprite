@@ -79,7 +79,7 @@ Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprit
 
 By default, the sprite is compact, right-aligned, and label-free so it stays out of the main text flow. The pet/state label lives in Pi's footer status line instead. Use `/pet size ...`, `/pet label on`, or `/pet align left` if you want a larger or more explicit widget.
 
-`/pet turn-status on` enables an opt-in footer recap after each agent turn. When enabled, `pi-sprite` runs a tiny no-tools side classifier over recent session context and mirrors a compact state in the footer, such as `🟢 PR merged` or `🟡 restart Pi to verify`. Use `/pet turn-status off` to disable it or `/pet turn-status clear` to clear the current footer status.
+Turn status is on by default. After each agent turn, `pi-sprite` runs a tiny no-tools side classifier over recent session context and mirrors a compact state in the footer, such as `🟢 PR merged` or `🟡 restart Pi to verify`. Use `/pet turn-status off` to disable it, `/pet turn-status on` to re-enable it, or `/pet turn-status clear` to clear the current footer status.
 
 Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
 
