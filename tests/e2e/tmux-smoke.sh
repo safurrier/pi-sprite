@@ -15,7 +15,7 @@ case "$scenario" in
     ;;
   btw-empty)
     slash='/btw'
-    expected='says'
+    expected='side thread'
     ;;
   petdex)
     slash='/pet install e2e-petdex-pet'
@@ -23,7 +23,7 @@ case "$scenario" in
     ;;
   btw)
     slash='/btw answer with exactly three words'
-    expected='says'
+    expected='side thread'
     ;;
   recap)
     slash='/recap'

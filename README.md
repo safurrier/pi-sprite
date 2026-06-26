@@ -129,14 +129,16 @@ Next: ...
 ### `/btw`
 
 ```text
-/btw <question>
-/btw:new
+/btw <message>
+/btw
+/btw:ask <question>
+/btw:new [message]
 /btw:clear
 /btw:inject
 /btw:summarize
 ```
 
-BTW answers side questions outside the main thread. The footer shows BTW running/ready state, and the answer appears in a compact speech bubble that points toward the sprite. Use ↑/↓, j/k, space/d, or u to scroll longer answers. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
+BTW is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups; `/btw` reopens the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread. The footer shows BTW running/ready state, and answers appear in a compact speech bubble that points toward the sprite. Use ↑/↓, j/k, space/d, or u to scroll longer answers. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
 
 ## Non-features
 

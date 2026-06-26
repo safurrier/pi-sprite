@@ -2,17 +2,12 @@ import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SpriteState } from "../sprite/manifest.ts";
 import { createScrollableSpeechBubble, type OverlaySection, type SpriteBubblePlacement } from "../ui/overlay.ts";
+import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
 import { answerWithSideSession } from "./session.ts";
 
 const ENTRY = "pi-sprite:btw-entry";
 const RESET = "pi-sprite:btw-reset";
 type ActivityStatus = "idle" | "running" | "ready" | "error";
-
-interface BtwEntry {
-	question: string;
-	answer: string;
-	timestamp: number;
-}
 
 interface BtwHooks {
 	setState?: (state: SpriteState, options?: { resetMs?: number }) => void;
@@ -60,19 +55,17 @@ function visibleContext(ctx: ExtensionCommandContext): string {
 	}
 	return lines.slice(-10).join("\n\n");
 }
-function formatThread(entries = thread): string {
-	return entries.map((e, i) => `## BTW ${i + 1}\nUser: ${e.question}\nAssistant: ${e.answer}`).join("\n\n");
-}
 async function showBtw(
 	ctx: ExtensionCommandContext,
 	sections: OverlaySection[],
 	placement: SpriteBubblePlacement = { anchor: "center", tail: "none", margin: {} },
 	speakerName = "Sprite",
+	title = `${speakerName} says`,
 ): Promise<void> {
 	await ctx.ui.custom(
 		(_tui, theme, _kb, done) =>
 			createScrollableSpeechBubble(
-				`${speakerName} says`,
+				title,
 				sections,
 				"↵ close · esc close · ↑/↓ scroll · /btw:inject · /btw:summarize",
 				theme,
@@ -96,19 +89,26 @@ async function askSideQuestion(
 	question: string,
 	ctx: ExtensionCommandContext,
 	hooks: BtwHooks = {},
+	options: { persist?: boolean; includeThread?: boolean } = {},
 ): Promise<void> {
+	const persist = options.persist ?? true;
+	const includeThread = options.includeThread ?? persist;
 	if (!ctx.model) return ctx.ui.notify("No active model selected for /btw.", "warning");
 	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
 	if (!auth.ok || !auth.apiKey)
 		return ctx.ui.notify(auth.ok ? "No API key available for current model." : auth.error, "error");
 	const prompt = [
-		"You are answering a side question for a Pi coding session. This answer is outside the main thread unless the user later injects it.",
+		persist
+			? "You are continuing a side conversation for a Pi coding session. This side thread stays outside the main thread unless the user later injects it."
+			: "You are answering a one-off side question for a Pi coding session. Do not assume this answer will continue the current BTW thread.",
 		"Be concise and practical.",
 		"",
 		"Main-session context:",
 		visibleContext(ctx) || "(No main context available.)",
 		"",
-		thread.length ? `Existing BTW thread:\n${formatThread()}` : "Existing BTW thread: (empty)",
+		includeThread && thread.length
+			? `Existing BTW thread:\n${formatThread(thread)}`
+			: "Existing BTW thread: (not included)",
 		"",
 		`Side question: ${question}`,
 	].join("\n");
@@ -135,18 +135,24 @@ async function askSideQuestion(
 			return ctx.ui.notify("BTW response returned no text.", "warning");
 		}
 		const entry = { question, answer, timestamp: Date.now() };
-		thread.push(entry);
-		pi.appendEntry(ENTRY, entry);
+		if (persist) {
+			thread.push(entry);
+			pi.appendEntry(ENTRY, entry);
+		}
 		hooks.setState?.("success", { resetMs: 1800 });
-		hooks.setBtwStatus?.("ready", thread.length);
+		hooks.setBtwStatus?.(thread.length ? "ready" : "idle", thread.length);
+		const speakerName = hooks.getSpriteName?.() ?? "Sprite";
 		await showBtw(
 			ctx,
-			[
-				{ title: "Question", body: question, accent: "muted" },
-				{ title: "Answer", body: answer, accent: "accent" },
-			],
+			persist
+				? formatThreadSections(thread, speakerName)
+				: [
+						{ title: "One-off question", body: question, accent: "muted" },
+						{ title: speakerName, body: answer, accent: "accent" },
+					],
 			hooks.getBubblePlacement?.(),
-			hooks.getSpriteName?.(),
+			speakerName,
+			persist ? `${speakerName} side thread` : `${speakerName} says`,
 		);
 	} catch (error) {
 		hooks.setState?.("error", { resetMs: 2500 });
@@ -164,7 +170,7 @@ async function summarizeThread(ctx: ExtensionCommandContext): Promise<string> {
 			content: [
 				{
 					type: "text",
-					text: `Summarize this side thread for injection into a coding-agent main session. Preserve decisions, risks, and next actions.\n\n${formatThread()}`,
+					text: `Summarize this side thread for injection into a coding-agent main session. Preserve decisions, risks, and next actions.\n\n${formatThread(thread)}`,
 				},
 			],
 			timestamp: Date.now(),
@@ -196,20 +202,28 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 		messages: event.messages.filter((m) => m.customType !== ENTRY && m.customType !== RESET),
 	}));
 	pi.registerCommand("btw", {
-		description: "Ask a side question outside the main thread",
+		description: "Continue the BTW side conversation outside the main thread",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const question = args.trim();
+			const speakerName = hooks.getSpriteName?.() ?? "Sprite";
 			if (!question) {
 				return showBtw(
 					ctx,
-					thread.length
-						? [{ title: `${thread.length} saved side question${thread.length === 1 ? "" : "s"}`, body: formatThread() }]
-						: [{ title: "Empty", body: "BTW thread is empty. Use /btw <question>." }],
+					formatThreadSections(thread, speakerName),
 					hooks.getBubblePlacement?.(),
-					hooks.getSpriteName?.(),
+					speakerName,
+					`${speakerName} side thread`,
 				);
 			}
 			await askSideQuestion(pi, question, ctx, hooks);
+		},
+	});
+	pi.registerCommand("btw:ask", {
+		description: "Ask a one-off BTW question without adding to the side thread",
+		handler: async (args: string, ctx: ExtensionCommandContext) => {
+			const question = args.trim();
+			if (!question) return ctx.ui.notify("Usage: /btw:ask <question>", "warning");
+			await askSideQuestion(pi, question, ctx, hooks, { persist: false, includeThread: false });
 		},
 	});
 	pi.registerCommand("btw:new", {
@@ -238,7 +252,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 			sendToMain(
 				pi,
 				ctx,
-				`${args.trim() ? `${args.trim()}\n\n` : ""}Here is a side-thread transcript for context:\n\n${formatThread()}`,
+				`${args.trim() ? `${args.trim()}\n\n` : ""}Here is a side-thread transcript for context:\n\n${formatThread(thread)}`,
 			);
 			thread = [];
 			pi.appendEntry(RESET, { timestamp: Date.now() });
