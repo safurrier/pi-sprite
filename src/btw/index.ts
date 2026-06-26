@@ -1,8 +1,7 @@
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { matchesKey } from "@earendil-works/pi-tui";
 import type { SpriteState } from "../sprite/manifest.ts";
-import { type OverlaySection, renderOverlay } from "../ui/overlay.ts";
+import { createScrollableSpeechBubble, type OverlaySection, type SpriteBubblePlacement } from "../ui/overlay.ts";
 import { answerWithSideSession } from "./session.ts";
 
 const ENTRY = "pi-sprite:btw-entry";
@@ -18,6 +17,8 @@ interface BtwEntry {
 interface BtwHooks {
 	setState?: (state: SpriteState, options?: { resetMs?: number }) => void;
 	setBtwStatus?: (status: ActivityStatus, count?: number) => void;
+	getBubblePlacement?: () => SpriteBubblePlacement;
+	getSpriteName?: () => string;
 }
 
 let thread: BtwEntry[] = [];
@@ -62,19 +63,31 @@ function visibleContext(ctx: ExtensionCommandContext): string {
 function formatThread(entries = thread): string {
 	return entries.map((e, i) => `## BTW ${i + 1}\nUser: ${e.question}\nAssistant: ${e.answer}`).join("\n\n");
 }
-async function showBtw(ctx: ExtensionCommandContext, sections: OverlaySection[]): Promise<void> {
+async function showBtw(
+	ctx: ExtensionCommandContext,
+	sections: OverlaySection[],
+	placement: SpriteBubblePlacement = { anchor: "center", tail: "none", margin: {} },
+	speakerName = "Sprite",
+): Promise<void> {
 	await ctx.ui.custom(
-		(_tui, theme, _kb, done) => ({
-			render: (width: number) =>
-				renderOverlay("BTW side thread", sections, "↵ close · esc close · /btw:inject · /btw:summarize", width, theme),
-			invalidate: () => {},
-			handleInput: (data: string) => {
-				if (matchesKey(data, "enter") || matchesKey(data, "escape")) done(undefined);
-			},
-		}),
+		(_tui, theme, _kb, done) =>
+			createScrollableSpeechBubble(
+				`${speakerName} says`,
+				sections,
+				"↵ close · esc close · ↑/↓ scroll · /btw:inject · /btw:summarize",
+				theme,
+				done,
+				{ tail: placement.tail, maxBodyLines: 12, minWidth: 48, maxWidth: 76 },
+			),
 		{
 			overlay: true,
-			overlayOptions: { width: "72%", minWidth: 64, maxHeight: "74%", anchor: "top-center", margin: { top: 1 } },
+			overlayOptions: {
+				width: "48%",
+				minWidth: 48,
+				maxHeight: "82%",
+				anchor: placement.anchor,
+				margin: placement.margin,
+			},
 		},
 	);
 }
@@ -126,10 +139,15 @@ async function askSideQuestion(
 		pi.appendEntry(ENTRY, entry);
 		hooks.setState?.("success", { resetMs: 1800 });
 		hooks.setBtwStatus?.("ready", thread.length);
-		await showBtw(ctx, [
-			{ title: "Question", body: question, accent: "muted" },
-			{ title: "Answer", body: answer, accent: "accent" },
-		]);
+		await showBtw(
+			ctx,
+			[
+				{ title: "Question", body: question, accent: "muted" },
+				{ title: "Answer", body: answer, accent: "accent" },
+			],
+			hooks.getBubblePlacement?.(),
+			hooks.getSpriteName?.(),
+		);
 	} catch (error) {
 		hooks.setState?.("error", { resetMs: 2500 });
 		hooks.setBtwStatus?.("error", thread.length);
@@ -187,6 +205,8 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 					thread.length
 						? [{ title: `${thread.length} saved side question${thread.length === 1 ? "" : "s"}`, body: formatThread() }]
 						: [{ title: "Empty", body: "BTW thread is empty. Use /btw <question>." }],
+					hooks.getBubblePlacement?.(),
+					hooks.getSpriteName?.(),
 				);
 			}
 			await askSideQuestion(pi, question, ctx, hooks);

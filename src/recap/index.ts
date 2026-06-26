@@ -1,8 +1,7 @@
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
-import { matchesKey } from "@earendil-works/pi-tui";
 import type { SpriteState } from "../sprite/manifest.ts";
-import { type OverlaySection, renderOverlay } from "../ui/overlay.ts";
+import { createScrollableSpeechBubble, type OverlaySection, type SpriteBubblePlacement } from "../ui/overlay.ts";
 
 const SYSTEM_PROMPT = `Create a compact coding-session recap. Output exactly these labels with concise values: Goal, State, Decisions, Files/commands, Next. Do not use markdown tables.`;
 
@@ -11,6 +10,8 @@ type ActivityStatus = "idle" | "running" | "ready" | "error";
 interface RecapHooks {
 	setState?: (state: SpriteState, options?: { resetMs?: number }) => void;
 	setRecapStatus?: (status: ActivityStatus) => void;
+	getBubblePlacement?: () => SpriteBubblePlacement;
+	getSpriteName?: () => string;
 }
 
 function extractText(content: unknown): string {
@@ -54,17 +55,37 @@ function recapSections(recap: string): OverlaySection[] {
 	return sections.length ? sections : [{ body: recap }];
 }
 
-async function showRecap(ctx: ExtensionCommandContext, recap: string): Promise<void> {
+async function showRecap(
+	ctx: ExtensionCommandContext,
+	recap: string,
+	placement: SpriteBubblePlacement = { anchor: "center", tail: "none", margin: {} },
+	speakerName = "Sprite",
+): Promise<void> {
 	await ctx.ui.custom(
-		(_tui, theme, _kb, done) => ({
-			render: (width: number) =>
-				renderOverlay("Session recap", recapSections(recap), "↵ close · esc close", width, theme),
-			invalidate: () => {},
-			handleInput: (data: string) => {
-				if (matchesKey(data, "enter") || matchesKey(data, "escape")) done(undefined);
+		(_tui, theme, _kb, done) =>
+			createScrollableSpeechBubble(
+				`${speakerName} recap`,
+				recapSections(recap),
+				"↵ close · esc close · ↑/↓ scroll",
+				theme,
+				done,
+				{
+					tail: placement.tail,
+					maxBodyLines: 18,
+					minWidth: 56,
+					maxWidth: 94,
+				},
+			),
+		{
+			overlay: true,
+			overlayOptions: {
+				width: "62%",
+				minWidth: 56,
+				maxHeight: "72%",
+				anchor: placement.anchor,
+				margin: placement.margin,
 			},
-		}),
-		{ overlay: true, overlayOptions: { width: "70%", minWidth: 60, maxHeight: "74%" } },
+		},
 	);
 }
 export function registerRecapCommand(pi: ExtensionAPI, hooks: RecapHooks = {}) {
@@ -101,7 +122,7 @@ export function registerRecapCommand(pi: ExtensionAPI, hooks: RecapHooks = {}) {
 				pi.appendEntry("pi-sprite:recap", { recap, timestamp: Date.now() });
 				hooks.setState?.("success", { resetMs: 1800 });
 				hooks.setRecapStatus?.("ready");
-				await showRecap(ctx, recap);
+				await showRecap(ctx, recap, hooks.getBubblePlacement?.(), hooks.getSpriteName?.());
 			} catch (error) {
 				hooks.setState?.("error", { resetMs: 2500 });
 				hooks.setRecapStatus?.("error");

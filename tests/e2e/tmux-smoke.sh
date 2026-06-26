@@ -13,17 +13,21 @@ case "$scenario" in
     slash='/sprite:context'
     expected='Context Usage'
     ;;
+  btw-empty)
+    slash='/btw'
+    expected='says'
+    ;;
   petdex)
     slash='/pet install e2e-petdex-pet'
     expected='▀'
     ;;
   btw)
     slash='/btw answer with exactly three words'
-    expected='BTW side thread'
+    expected='says'
     ;;
   recap)
     slash='/recap'
-    expected='Session Recap'
+    expected='recap'
     ;;
   *) echo "unknown scenario: $scenario" >&2; exit 2 ;;
 esac
