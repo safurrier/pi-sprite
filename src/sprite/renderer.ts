@@ -243,6 +243,14 @@ function wrapTmuxPassthrough(sequence: string): string {
 	return `${TMUX_PASSTHROUGH_PREFIX}${sequence.replaceAll("\u001b", "\u001b\u001b")}${TMUX_PASSTHROUGH_SUFFIX}`;
 }
 
+function withKittyPlacementId(sequence: string, placementId: number): string {
+	const commandStart = sequence.indexOf("\u001b_G");
+	if (commandStart < 0) return sequence;
+	const paramsEnd = sequence.indexOf(";", commandStart);
+	if (paramsEnd < 0) return sequence;
+	return `${sequence.slice(0, paramsEnd)},p=${placementId}${sequence.slice(paramsEnd)}`;
+}
+
 function nativeImageCellSize(
 	frame: NativeSpriteFrame,
 	maxWidth: number,
@@ -293,12 +301,15 @@ class KittySpriteImage implements Component {
 		const configured = preset(this.options);
 		const maxWidth = Math.max(1, Math.min(width - 2, configured.columns));
 		const size = nativeImageCellSize(this.frame, maxWidth, configured.rows);
-		const drawSequence = encodeKitty(this.frame.base64, {
-			columns: size.columns,
-			rows: size.rows,
-			imageId: this.imageId,
-			moveCursor: false,
-		});
+		const drawSequence = withKittyPlacementId(
+			encodeKitty(this.frame.base64, {
+				columns: size.columns,
+				rows: size.rows,
+				imageId: this.imageId,
+				moveCursor: false,
+			}),
+			this.imageId,
+		);
 		const deletePreviousSequence =
 			this.previousImageId && this.previousImageId !== this.imageId ? deleteKittyImage(this.previousImageId) : "";
 		const sequence = `${TUI_IMAGE_CLEANUP_GUARD_SEQUENCE}${drawSequence}${deletePreviousSequence}`;
