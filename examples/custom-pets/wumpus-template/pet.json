@@ -1,0 +1,13 @@
+{
+	"id": "wumpus",
+	"name": "Wumpus",
+	"author": "Alex",
+	"description": "A tiny Wumpus companion for pi-sprite.",
+	"sprites": {
+		"idle": "idle.png",
+		"thinking": "thinking.png",
+		"working": "working.png",
+		"success": "success.png",
+		"error": "error.png"
+	}
+}

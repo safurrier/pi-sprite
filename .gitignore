@@ -10,3 +10,5 @@ artifacts/e2e/*
 !artifacts/e2e/.gitkeep
 test-results/*
 !test-results/.gitkeep
+examples/petdex-downloads/*
+!examples/petdex-downloads/.gitkeep
