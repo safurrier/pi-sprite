@@ -111,7 +111,7 @@ if (process.env.PI_SPRITE_E2E_TUI === "1") {
 	await writeRenderFixture();
 	const petdexRoot = await writePetdexFixture();
 	await withFixtureServer(petdexRoot, async () => {
-		for (const scenario of ["pet", "render", "context", "btw-empty", "petdex"])
+		for (const scenario of ["pet", "render", "context", "btw-empty", "turn-status", "petdex"])
 			run("bash", ["tests/e2e/tmux-smoke.sh", scenario]);
 	});
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/pet.txt", "--contains", "pi-sprite"]);

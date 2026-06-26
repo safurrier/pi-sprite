@@ -18,6 +18,7 @@ import {
 	type SpriteSize,
 	supportsNativeSpriteImages,
 } from "./renderer.ts";
+import { formatTurnStatusFooter, type TurnStatus } from "./turn-status-format.ts";
 
 type ActivityStatus = "idle" | "running" | "ready" | "error";
 
@@ -27,6 +28,7 @@ interface SavedState {
 	size?: SpriteSize;
 	label?: boolean;
 	align?: SpriteAlign;
+	turnStatusEnabled?: boolean;
 }
 
 interface CompanionActivity {
@@ -73,6 +75,8 @@ export function createSpriteRuntime() {
 	let size: SpriteSize = DEFAULT_SIZE;
 	let label = DEFAULT_LABEL;
 	let align: SpriteAlign = DEFAULT_ALIGN;
+	let turnStatusEnabled = false;
+	let turnStatus: TurnStatus | "pending" | undefined;
 	let activity: CompanionActivity = { btwCount: 0, btwStatus: "idle", recapStatus: "idle" };
 	let resetTimer: ReturnType<typeof setTimeout> | undefined;
 	let clearWidgetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -116,6 +120,9 @@ export function createSpriteRuntime() {
 		const recap = activityLabel("recap", activity.recapStatus);
 		if (btw) parts.push(btw);
 		if (recap) parts.push(recap);
+		if (turnStatusEnabled && turnStatus) {
+			parts.push(turnStatus === "pending" ? "status…" : formatTurnStatusFooter(turnStatus));
+		}
 		currentCtx.ui.setStatus("pi-sprite", parts.join(" · "));
 	}
 
@@ -227,7 +234,7 @@ export function createSpriteRuntime() {
 	}
 
 	function persist(): void {
-		saveSaved({ selectedPetId, visible, size, label, align });
+		saveSaved({ selectedPetId, visible, size, label, align, turnStatusEnabled });
 	}
 
 	function activatePet(id: string): void {
@@ -265,6 +272,7 @@ export function createSpriteRuntime() {
 			size = saved.size ?? size;
 			label = saved.label ?? label;
 			align = saved.align ?? align;
+			turnStatusEnabled = saved.turnStatusEnabled ?? turnStatusEnabled;
 			state = "idle";
 			render();
 		},
@@ -281,6 +289,23 @@ export function createSpriteRuntime() {
 		},
 		setRecapStatus(status: ActivityStatus) {
 			activity = { ...activity, recapStatus: status };
+			updateFooter();
+		},
+		isTurnStatusEnabled() {
+			return turnStatusEnabled;
+		},
+		clearTurnStatus() {
+			turnStatus = undefined;
+			updateFooter();
+		},
+		setTurnStatusPending() {
+			if (!turnStatusEnabled) return;
+			turnStatus = "pending";
+			updateFooter();
+		},
+		setTurnStatus(status: TurnStatus | undefined) {
+			if (!turnStatusEnabled) return;
+			turnStatus = status;
 			updateFooter();
 		},
 		getBubblePlacement() {
@@ -304,7 +329,7 @@ export function createSpriteRuntime() {
 		registerCommands(pi: ExtensionAPI) {
 			pi.registerCommand("pet", {
 				description:
-					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | size <tiny|small|medium|large> | label <on|off> | align <left|right> | clear-native",
+					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | size <tiny|small|medium|large> | label <on|off> | align <left|right> | turn-status <on|off|clear> | clear-native",
 				handler: async (args: string, commandCtx: ExtensionContext) => {
 					ctx = commandCtx;
 					const [cmd = "", ...rest] = args.trim().split(/\s+/u).filter(Boolean);
@@ -312,7 +337,7 @@ export function createSpriteRuntime() {
 					switch (cmd || "status") {
 						case "status":
 							commandCtx.ui.notify(
-								`pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}; size=${size}; label=${label ? "on" : "off"}; align=${align}`,
+								`pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}; size=${size}; label=${label ? "on" : "off"}; align=${align}; turn-status=${turnStatusEnabled ? "on" : "off"}${turnStatus && turnStatus !== "pending" ? `; ${formatTurnStatusFooter(turnStatus)}` : ""}`,
 								"info",
 							);
 							break;
@@ -425,6 +450,23 @@ export function createSpriteRuntime() {
 							commandCtx.ui.notify(`pi-sprite aligned ${align}.`, "info");
 							break;
 						}
+						case "turn-status": {
+							if (value !== "on" && value !== "off" && value !== "clear") {
+								throw new Error("Usage: /pet turn-status <on|off|clear>");
+							}
+							if (value === "clear") {
+								turnStatus = undefined;
+								updateFooter();
+								commandCtx.ui.notify("Cleared pi-sprite turn status.", "info");
+								break;
+							}
+							turnStatusEnabled = value === "on";
+							if (!turnStatusEnabled) turnStatus = undefined;
+							persist();
+							updateFooter();
+							commandCtx.ui.notify(`pi-sprite turn status ${turnStatusEnabled ? "enabled" : "disabled"}.`, "info");
+							break;
+						}
 						case "clear-native": {
 							const clearLines = clearAllNativeSpriteImages();
 							if (clearLines.length) commandCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
@@ -434,7 +476,7 @@ export function createSpriteRuntime() {
 						}
 						default:
 							commandCtx.ui.notify(
-								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|size <tiny|small|medium|large>|label <on|off>|align <left|right>|clear-native]",
+								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|size <tiny|small|medium|large>|label <on|off>|align <left|right>|turn-status <on|off|clear>|clear-native]",
 								"info",
 							);
 					}

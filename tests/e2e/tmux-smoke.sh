@@ -17,6 +17,10 @@ case "$scenario" in
     slash='/btw'
     expected='side thread'
     ;;
+  turn-status)
+    slash='/pet turn-status on'
+    expected='turn status enabled'
+    ;;
   petdex)
     slash='/pet install e2e-petdex-pet'
     expected='▀'
