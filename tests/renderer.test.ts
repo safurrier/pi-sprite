@@ -76,6 +76,7 @@ test("detects native sprite image capability and builds a native widget", () => 
 		assert.ok(rendered.length > 0);
 		assert.ok((rendered[0] ?? "").startsWith("   "));
 		assert.ok((rendered[0] ?? "").includes("\u001b_G"));
+		assert.match(rendered.join("\n"), /a=T[^;]*i=123[^;]*p=123/u);
 		assert.ok(clearAllNativeSpriteImages().join("\n").includes("a=d,d=A"));
 	} finally {
 		if (previousTmux === undefined) delete process.env.TMUX;
@@ -126,6 +127,7 @@ test("allows explicit native sprite image opt-in inside tmux", () => {
 		const rendered = widget.render(20).join("\n");
 		assert.ok(rendered.includes("\u001bPtmux;\u001b\u001b_G"));
 		assert.match(rendered, /a=d,d=I,i=0/u);
+		assert.match(rendered, /a=T[^;]*i=123[^;]*p=123/u);
 		assert.doesNotMatch(rendered, /a=d,d=I,i=123/u);
 		assert.ok(clearNativeSpriteImage(123).join("\n").includes("a=d,d=I,i=123"));
 		assert.equal(clearNativeSpriteImages([123, 124]).length, 2);
@@ -155,9 +157,11 @@ test("native sprite widget deletes the previous frame after drawing the next fra
 		const rendered = widget.render(20).join("\n");
 		const guardIndex = rendered.indexOf("a=d,d=I,i=0");
 		const drawIndex = rendered.indexOf("a=T");
+		const placementIndex = rendered.indexOf("p=124");
 		const deleteIndex = rendered.indexOf("a=d,d=I,i=123");
 		assert.ok(guardIndex >= 0);
 		assert.ok(drawIndex > guardIndex);
+		assert.ok(placementIndex > drawIndex);
 		assert.ok(deleteIndex > drawIndex);
 		assert.doesNotMatch(rendered, /a=d,d=I,i=124/u);
 	} finally {
