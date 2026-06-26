@@ -23,8 +23,8 @@ function trimToChars(text: string, maxChars: number): string {
 	return `${compact.slice(0, Math.max(0, maxChars - 1)).trimEnd()}…`;
 }
 
-export function formatTurnStatusFooter(status: TurnStatus, maxLabelChars = 52): string {
-	return `${emojiForTurnStatus(status.state)} ${trimToChars(status.label, maxLabelChars)}`;
+export function formatTurnStatusFooter(status: TurnStatus, maxLabelChars = 44): string {
+	return `${emojiForTurnStatus(status.state)} ${trimToChars(status.label, maxLabelChars)} ✦`;
 }
 
 function extractJsonObject(text: string): string | undefined {

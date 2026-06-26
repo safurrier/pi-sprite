@@ -13,7 +13,7 @@ test("parses structured turn status JSON", () => {
 	assert.equal(status?.state, "followup");
 	assert.equal(status?.label, "restart Pi to verify");
 	assert.deepEqual(status?.actions, ["restart Pi", "try /btw"]);
-	assert.equal(formatTurnStatusFooter(status!), "🟡 restart Pi to verify");
+	assert.equal(formatTurnStatusFooter(status!), "🟡 restart Pi to verify ✦");
 });
 
 test("rejects invalid turn status responses", () => {
