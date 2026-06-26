@@ -118,7 +118,7 @@ if (process.env.PI_SPRITE_E2E_TUI === "1") {
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/render.txt", "--contains", "E2E Render Pet"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/render.txt", "--contains", "▀"]);
 	run("node", ["tests/e2e/assert-context-overlay.mjs", "artifacts/e2e/context.txt"]);
-	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw-empty.txt", "--contains", "says"]);
+	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw-empty.txt", "--contains", "side thread"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/petdex.txt", "--contains", "E2E Petdex Pet"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/petdex.txt", "--contains", "▀"]);
 } else {
@@ -127,7 +127,7 @@ if (process.env.PI_SPRITE_E2E_TUI === "1") {
 
 if (process.env.PI_SPRITE_E2E_MODEL === "1") {
 	for (const scenario of ["btw", "recap"]) run("bash", ["tests/e2e/tmux-smoke.sh", scenario]);
-	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw.txt", "--contains", "says"]);
+	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw.txt", "--contains", "side thread"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw.txt", "--contains", "╰─╮"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/recap.txt", "--contains", "recap"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/recap.txt", "--contains", "╰─╮"]);
