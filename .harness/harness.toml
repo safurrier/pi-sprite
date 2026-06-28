@@ -1,0 +1,9 @@
+version = 1
+default_profile = "pi-sprite-root"
+profiles_dir = "profiles"
+
+[[targets]]
+name = "pi-sprite"
+path = ".."
+profile = "pi-sprite-root"
+system_map = "system.toml"
