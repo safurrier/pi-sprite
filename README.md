@@ -40,6 +40,7 @@ pi install git:github.com/safurrier/pi-sprite
 /pet label on|off
 /pet align left|right
 /pet turn-status on|off|clear
+/pet live-status on|off|clear
 ```
 
 Pets live under:
@@ -105,7 +106,9 @@ Third-party reference sprites should stay local unless their licenses are verifi
 node skills/pi-sprite-authoring/scripts/download-petdex-examples.mjs --limit 12 --out examples/petdex-downloads
 ```
 
-Turn status is on by default. After each agent turn, `pi-sprite` runs a tiny no-tools side classifier over recent session context and mirrors a compact state in the footer, such as `🟢 PR merged` or `🟡 restart Pi to verify`. Use `/pet turn-status off` to disable it, `/pet turn-status on` to re-enable it, or `/pet turn-status clear` to clear the current footer status.
+Turn status is on by default. After each agent turn, `pi-sprite` runs a tiny no-tools side classifier over recent session context and mirrors a compact final state in the footer, such as `🟢 PR merged` or `🟡 restart Pi to verify`. Use `/pet turn-status off` to disable it, `/pet turn-status on` to re-enable it, or `/pet turn-status clear` to clear the current footer status.
+
+Live status is also on by default. During long-running agent turns, `pi-sprite` waits five minutes, then runs a tiny no-tools side classifier for a provisional in-progress footer such as `🟣 running tests…` or `🟣 debugging renderer…`. It never claims completion; the final turn status replaces it when the agent turn ends. Use `/pet live-status off` to disable it, `/pet live-status on` to re-enable it, or `/pet live-status clear` to clear the current live footer status.
 
 Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
 

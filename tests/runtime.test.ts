@@ -7,6 +7,35 @@ import { setCapabilities } from "@earendil-works/pi-tui";
 import sharp from "sharp";
 import { createSpriteRuntime, nativeSpriteCleanupImageIds, stableNativeImageId } from "../src/sprite/runtime.ts";
 
+async function withSpriteHome<T>(fn: (home: string) => Promise<T> | T): Promise<T> {
+	const previousHome = process.env.PI_SPRITE_HOME;
+	const home = mkdtempSync(join(tmpdir(), "pi-sprite-runtime-"));
+	try {
+		process.env.PI_SPRITE_HOME = home;
+		return await fn(home);
+	} finally {
+		if (previousHome === undefined) delete process.env.PI_SPRITE_HOME;
+		else process.env.PI_SPRITE_HOME = previousHome;
+		rmSync(home, { recursive: true, force: true });
+	}
+}
+
+function fakeContext(statuses: string[] = []) {
+	return {
+		// biome-ignore lint/style/useNamingConvention: Pi extension contexts expose this as hasUI.
+		hasUI: true,
+		ui: {
+			setStatus(_key: string, value: string | undefined) {
+				if (value) statuses.push(value);
+			},
+			setWidget() {},
+			notify(message: string) {
+				statuses.push(message);
+			},
+		},
+	} as never;
+}
+
 test("uses one stable native image id per tmux pane across cwd changes", () => {
 	const previousPane = process.env.TMUX_PANE;
 	try {
@@ -27,6 +56,72 @@ test("uses one stable native image id per tmux pane across cwd changes", () => {
 		if (previousPane === undefined) delete process.env.TMUX_PANE;
 		else process.env.TMUX_PANE = previousPane;
 	}
+});
+
+test("live status is enabled by default and can be disabled persistently", async () => {
+	await withSpriteHome(async () => {
+		const runtime = createSpriteRuntime();
+		await runtime.start(fakeContext());
+		assert.equal(runtime.isLiveStatusEnabled(), true);
+
+		let commandHandler: ((args: string, ctx: never) => Promise<void>) | undefined;
+		runtime.registerCommands({
+			registerCommand(_name: string, command: { handler: (args: string, ctx: never) => Promise<void> }) {
+				commandHandler = command.handler;
+			},
+		} as never);
+		await commandHandler!("live-status off", fakeContext());
+		assert.equal(runtime.isLiveStatusEnabled(), false);
+
+		const restarted = createSpriteRuntime();
+		await restarted.start(fakeContext());
+		assert.equal(restarted.isLiveStatusEnabled(), false);
+	});
+});
+
+test("live status clear does not disable future live status", async () => {
+	await withSpriteHome(async () => {
+		const statuses: string[] = [];
+		const runtime = createSpriteRuntime();
+		await runtime.start(fakeContext(statuses));
+		runtime.setLiveStatus({ label: "debugging renderer" });
+		assert.match(statuses.at(-1) ?? "", /debugging renderer/u);
+
+		let commandHandler: ((args: string, ctx: never) => Promise<void>) | undefined;
+		runtime.registerCommands({
+			registerCommand(_name: string, command: { handler: (args: string, ctx: never) => Promise<void> }) {
+				commandHandler = command.handler;
+			},
+		} as never);
+		await commandHandler!("live-status clear", fakeContext(statuses));
+		assert.equal(runtime.isLiveStatusEnabled(), true);
+		assert.doesNotMatch(statuses.at(-2) ?? "", /debugging renderer/u);
+	});
+});
+
+test("cleared live status ignores stale classifier result", async () => {
+	await withSpriteHome(async () => {
+		const statuses: string[] = [];
+		const runtime = createSpriteRuntime();
+		await runtime.start(fakeContext(statuses));
+		const generation = runtime.setLiveStatusPending();
+		runtime.clearLiveStatus();
+		runtime.setLiveStatus({ label: "stale result" }, generation);
+		assert.doesNotMatch(statuses.at(-1) ?? "", /stale result/u);
+	});
+});
+
+test("final turn status clears provisional live status", async () => {
+	await withSpriteHome(async () => {
+		const statuses: string[] = [];
+		const runtime = createSpriteRuntime();
+		await runtime.start(fakeContext(statuses));
+		runtime.setLiveStatus({ label: "running tests" });
+		runtime.setTurnStatus({ state: "done", label: "tests passed" });
+		const footer = statuses.at(-1) ?? "";
+		assert.match(footer, /tests passed/u);
+		assert.doesNotMatch(footer, /running tests/u);
+	});
 });
 
 test("native startup reserves blank cells instead of drawing ANSI loading art", async () => {

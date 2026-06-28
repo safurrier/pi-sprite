@@ -21,14 +21,14 @@ validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
 [[components.invariants]]
 id = "final-status-wins"
 statement = "The authoritative footer status is produced after agent_end; provisional or activity footer state must not outlive the completed turn."
-evidence = ["extensions/index.ts", "src/sprite/turn-status.ts", "src/sprite/runtime.ts", "tests/turn-status.test.ts"]
+evidence = ["extensions/index.ts", "src/sprite/turn-status.ts", "src/sprite/live-status.ts", "src/sprite/runtime.ts", "tests/turn-status.test.ts"]
 validation_checks = ["focused-unit-test", "unit-tests"]
 
 [[components]]
 id = "sprite-runtime-rendering"
 title = "Sprite runtime and rendering"
 kind = "tui-widget-runtime"
-paths = ["src/sprite/runtime.ts", "src/sprite/renderer.ts", "src/sprite/turn-status*.ts", "src/ui/overlay.ts", "tests/renderer.test.ts", "tests/runtime.test.ts", "tests/overlay.test.ts", "tests/turn-status.test.ts"]
+paths = ["src/sprite/runtime.ts", "src/sprite/renderer.ts", "src/sprite/turn-status*.ts", "src/sprite/live-status*.ts", "src/ui/overlay.ts", "tests/renderer.test.ts", "tests/runtime.test.ts", "tests/overlay.test.ts", "tests/turn-status.test.ts"]
 read_before_editing = ["README.md", "docs/pi-sprite-implementation-spec.md"]
 validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate", "e2e-gate"]
 
