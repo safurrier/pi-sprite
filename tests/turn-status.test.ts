@@ -50,6 +50,13 @@ test("rejects invalid live status responses", () => {
 	assert.equal(parseLiveStatusResponse('{"label":""}'), undefined);
 });
 
+test("rejects completion-like live status labels", () => {
+	assert.equal(parseLiveStatusResponse('{"label":"tests passed"}'), undefined);
+	assert.equal(parseLiveStatusResponse('{"label":"all done"}'), undefined);
+	assert.equal(parseLiveStatusResponse('{"label":"PR ready"}'), undefined);
+	assert.equal(parseLiveStatusResponse('{"label":"running tests"}')?.label, "running tests");
+});
+
 test("live status prompt stays provisional", () => {
 	const prompt = promptForLiveStatus("user: make this work");
 	assert.match(prompt, /provisional/u);

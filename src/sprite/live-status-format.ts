@@ -18,6 +18,12 @@ function extractJsonObject(text: string): string | undefined {
 	return candidate.slice(start, end + 1);
 }
 
+function claimsFinalOutcome(label: string): boolean {
+	return /\b(done|complete|completed|finished|fixed|verified|merged|ready|passed|passing)\b|\ball\s+done\b|\btests?\s+pass(?:ed|ing)?\b|\bpr\s+ready\b/iu.test(
+		label,
+	);
+}
+
 export function formatLiveStatusFooter(status: LiveTurnStatus, maxLabelChars = 38): string {
 	return `🟣 ${trimToChars(status.label, maxLabelChars)}…`;
 }
@@ -34,6 +40,7 @@ export function parseLiveStatusResponse(text: string): LiveTurnStatus | undefine
 	if (!parsed || typeof parsed !== "object") return undefined;
 	const value = parsed as { label?: unknown; detail?: unknown };
 	if (typeof value.label !== "string" || !value.label.trim()) return undefined;
+	if (claimsFinalOutcome(value.label)) return undefined;
 	return {
 		label: trimToChars(value.label, 72),
 		detail: typeof value.detail === "string" && value.detail.trim() ? trimToChars(value.detail, 160) : undefined,

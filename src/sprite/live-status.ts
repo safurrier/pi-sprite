@@ -1,10 +1,7 @@
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
-import type { LiveTurnStatus } from "./live-status-format.ts";
-import { formatLiveStatusFooter, parseLiveStatusResponse, promptForLiveStatus } from "./live-status-format.ts";
+import { type LiveTurnStatus, parseLiveStatusResponse, promptForLiveStatus } from "./live-status-format.ts";
 import { recentConversationForTurnStatus } from "./turn-status-format.ts";
-
-export { formatLiveStatusFooter, type LiveTurnStatus, parseLiveStatusResponse, promptForLiveStatus };
 
 const LIVE_STATUS_MAX_TOKENS = 120;
 const LIVE_STATUS_TIMEOUT_MS = 20_000;
