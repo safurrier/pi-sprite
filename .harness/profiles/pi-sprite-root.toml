@@ -1,0 +1,107 @@
+name = "pi-sprite-root"
+title = "Pi Sprite Root"
+summary = "Validation contract for the pi-sprite Pi package: extension runtime, sprite rendering/import, context/recap/BTW commands, package skills, and TUI/E2E smoke coverage."
+target_hint = "Use --target <repo-root> for pi-sprite work. For this repo-local profile, run HK with HARNESS_KIT_CONFIG=.harness/harness.toml until a user/dots target binding is installed."
+instructions = """Use this profile for pi-sprite root work. Prefer focused unit tests while iterating, especially direct `node --test --import tsx <test_file>` for touched modules. Run `mise run check` once implementation is stable and before handoff; it is the fast local gate and CI's Quality Gate delegates to it through `mise run ci`. Run `mise run verify` for PR/full validation, TUI/E2E-impacting changes, package smoke changes, or CI/task-contract changes. Run validation commands directly in the shell and record exact command/result evidence with `hk validate --why ... -- <command>`. Do not chase final readiness after every edit: use focused checks while iterating, run broad final gates once stable, and after small review fixes prefer targeted validation/review for changed paths unless behavior or design changed.
+
+Repo-local HK config: this repo carries `.harness/harness.toml`, `.harness/profiles/pi-sprite-root.toml`, and `.harness/system.toml`. Until HK auto-discovers repo-local profile config, use `HARNESS_KIT_CONFIG=.harness/harness.toml hk ...` for config diagnostics and `hk ... --target .` for normal lifecycle state."""
+
+[[checks]]
+name = "focused-unit-test"
+purpose = "Run the smallest Node test file that covers the touched TypeScript module."
+command_template = "node --test --import tsx <test_file>"
+run_from = "repo-root"
+required_inputs = ["test_file"]
+applies_when = ["src/**", "extensions/**", "tests/*.test.ts", "skills/**"]
+notes = ["Source: package.json test script uses node --test --import tsx tests/*.test.ts.", "Use this repeatedly while iterating; choose the specific tests/<area>.test.ts file for the changed component."]
+
+[[checks]]
+name = "format-check"
+purpose = "Check formatting and Biome rules without writing fixes."
+command_template = "npm run fmt:check"
+run_from = "repo-root"
+applies_when = ["src/**", "extensions/**", "tests/**", "skills/**", "examples/**", "README.md", "docs/**", "package.json", "biome.json"]
+notes = ["Equivalent underlying command is `biome check .`; `mise run check` also includes this."]
+
+[[checks]]
+name = "lint"
+purpose = "Run Biome lint for TypeScript, JavaScript, and package support files."
+command_template = "mise run lint"
+run_from = "repo-root"
+applies_when = ["src/**", "extensions/**", "tests/**", "skills/**", "examples/**", "package.json", "biome.json"]
+notes = ["Source: package.json script `lint`."]
+
+[[checks]]
+name = "typecheck"
+purpose = "Run TypeScript static type checking."
+command_template = "mise run typecheck"
+run_from = "repo-root"
+applies_when = ["src/**", "extensions/**", "tests/**", "skills/**", "package.json", "tsconfig.json"]
+required_when = ["src/**", "extensions/**", "tests/**", "package.json", "tsconfig.json"]
+notes = ["Source: package.json script `typecheck`."]
+
+[[checks]]
+name = "unit-tests"
+purpose = "Run the full unit test suite without the heavier TUI/E2E smoke runner."
+command_template = "mise run test"
+run_from = "repo-root"
+applies_when = ["src/**", "extensions/**", "tests/*.test.ts", "skills/**", "examples/**", "package.json"]
+required_when = ["src/**", "extensions/**", "tests/*.test.ts", "skills/**", "examples/**"]
+notes = ["Source: package.json script `test`."]
+
+[[checks]]
+name = "package-smoke"
+purpose = "Smoke package install/discovery shape in isolated or full-config mode after package metadata, extension, skill, or files list changes."
+command_template = "node tests/e2e/package-smoke.mjs <mode>"
+run_from = "repo-root"
+required_inputs = ["mode"]
+applies_when = ["package.json", "package-lock.json", "extensions/**", "skills/**", "examples/**", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE.md", "tests/e2e/package-smoke.mjs"]
+required_when = ["package.json", "extensions/**", "skills/**"]
+notes = ["Use mode `--isolated` for package boundary checks and `--full-config` before PR when package discovery changed."]
+
+[[checks]]
+name = "fast-gate"
+purpose = "Default final local quality gate before commit or handoff; not the repeated inner-loop check."
+command_template = "mise run check"
+run_from = "repo-root"
+applies_when = ["src/**", "extensions/**", "tests/**", "skills/**", "examples/**", ".mise/**", ".github/**", ".harness/**", "docs/**", "README.md", "package.json", "package-lock.json", "tsconfig.json", "biome.json"]
+required_when = ["src/**", "extensions/**", "tests/**", "skills/**", "examples/**", "package.json", "package-lock.json", "tsconfig.json", "biome.json"]
+notes = ["Source: README Development section, package.json `check`, .mise/tasks/check, and GitHub Quality Gate via `mise run ci`.", "Use focused checks while iterating; run this once implementation is stable and before handoff."]
+
+[[checks]]
+name = "e2e-gate"
+purpose = "Run full validation including TUI/E2E smoke coverage for PRs and runtime/UI-sensitive changes."
+command_template = "mise run verify"
+run_from = "repo-root"
+applies_when = ["src/**", "extensions/**", "tests/e2e/**", ".mise/**", ".github/**", "package.json", "README.md", "docs/**"]
+required_when = ["extensions/**", "src/sprite/renderer.ts", "src/sprite/runtime.ts", "src/ui/**", "tests/e2e/**", ".mise/**", ".github/**"]
+notes = ["Source: README Development section, package.json `verify`, .mise/tasks/verify, and GitHub Full Validation PR job.", "Set PI_SPRITE_E2E_TUI=1, PI_SPRITE_E2E_MODEL=1, or PI_SPRITE_E2E_NETWORK=1 only when the change needs those opt-in smoke paths."]
+
+[[checks]]
+name = "hk-config-validate"
+purpose = "Validate repo-local Harness Kit profile and system-map joins."
+command_template = "HARNESS_KIT_CONFIG=.harness/harness.toml hk config validate --target . --json"
+run_from = "repo-root"
+applies_when = [".harness/**"]
+required_when = [".harness/**"]
+notes = ["This validates deterministic HK config/profile/system-map references; it does not run repo source validation."]
+
+[[checks]]
+name = "hk-readiness"
+purpose = "Checkpoint HK lifecycle freshness and readiness after recording validation/review evidence."
+command_template = "hk sync --target <target> --json && hk ready --target <target> --json"
+run_from = "current-directory"
+applies_when = ["*"]
+notes = ["This checks HK ledger evidence and readiness; it does not rerun repo-native validation.", "Do not mark this check required because `hk ready` evaluates required profile checks; requiring this check makes readiness circular."]
+
+[[reviews]]
+name = "codex-review"
+purpose = "Independent AI review before handoff for meaningful source, validation, package, docs, or HK config changes."
+backend = "codex"
+dispatch_hint = "Run near handoff after implementation stabilizes. For small later fixes, prefer targeted follow-up review for changed paths instead of rerunning the full broad review unless behavior or design changed."
+applies_when = ["src/**", "extensions/**", "tests/**", "skills/**", "examples/**", ".mise/**", ".github/**", ".harness/**", "docs/**", "README.md", "package.json"]
+required_when = ["src/**", "extensions/**", "tests/**", "skills/**", ".mise/**", ".github/**", ".harness/**", "package.json"]
+
+[reviews.instructions]
+type = "inline"
+text = "Review pi-sprite changes for Pi extension lifecycle safety, sprite rendering/widget cleanup, command UX, package discovery/install shape, validation coverage, and whether the slim-companion non-goals are preserved. For HK config changes, check that profiles own commands/requiredness while system maps remain advisory component/invariant context."

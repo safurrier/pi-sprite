@@ -1,0 +1,131 @@
+version = 1
+
+[system]
+name = "pi-sprite"
+summary = "Slim Pi package that provides a passive sprite companion, pet import/gallery support, context/recap/BTW commands, and package authoring resources."
+
+[[components]]
+id = "extension-lifecycle"
+title = "Extension lifecycle and command registration"
+kind = "pi-extension"
+paths = ["extensions/index.ts", "package.json"]
+read_before_editing = ["README.md"]
+validation_checks = ["typecheck", "unit-tests", "fast-gate", "e2e-gate"]
+
+[[components.invariants]]
+id = "session-scoped-resources"
+statement = "Timers, widgets, native image placements, and model side work are started from session or agent events and cleaned up on agent_end or session_shutdown."
+evidence = ["extensions/index.ts", "src/sprite/runtime.ts", "tests/runtime.test.ts"]
+validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
+
+[[components.invariants]]
+id = "final-status-wins"
+statement = "The authoritative footer status is produced after agent_end; provisional or activity footer state must not outlive the completed turn."
+evidence = ["extensions/index.ts", "src/sprite/turn-status.ts", "src/sprite/live-status.ts", "src/sprite/runtime.ts", "tests/turn-status.test.ts"]
+validation_checks = ["focused-unit-test", "unit-tests"]
+
+[[components]]
+id = "sprite-runtime-rendering"
+title = "Sprite runtime and rendering"
+kind = "tui-widget-runtime"
+paths = ["src/sprite/runtime.ts", "src/sprite/renderer.ts", "src/sprite/turn-status*.ts", "src/sprite/live-status*.ts", "src/ui/overlay.ts", "tests/renderer.test.ts", "tests/runtime.test.ts", "tests/overlay.test.ts", "tests/turn-status.test.ts"]
+read_before_editing = ["README.md", "docs/pi-sprite-implementation-spec.md"]
+validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate", "e2e-gate"]
+
+[[components.invariants]]
+id = "slim-passive-companion"
+statement = "The sprite remains a small passive companion and must not grow autonomous personality, pet-sim economy, sound/voice, large dashboards, or process-manager behavior."
+evidence = ["README.md", "docs/pi-sprite-implementation-spec.md", "tests/non-features.test.ts"]
+validation_checks = ["unit-tests", "fast-gate"]
+
+[[components.invariants]]
+id = "native-images-are-managed"
+statement = "Native terminal images use stable pane-scoped ids and cleanup paths so tmux/Ghostty placements do not trail or leak across redraws."
+evidence = ["src/sprite/renderer.ts", "src/sprite/runtime.ts", "tests/renderer.test.ts", "tests/runtime.test.ts", "README.md"]
+validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
+
+[[components]]
+id = "pet-import-gallery"
+title = "Pet import, manifest, and gallery loading"
+kind = "asset-import"
+paths = ["src/sprite/loader.ts", "src/sprite/manifest.ts", "src/sprite/petdex.ts", "src/sprite/paths.ts", "tests/importer.test.ts", "tests/manifest.test.ts", "tests/petdex.test.ts"]
+read_before_editing = ["README.md", "NOTICE.md"]
+validation_checks = ["focused-unit-test", "unit-tests", "fast-gate"]
+
+[[components.invariants]]
+id = "imports-stay-local-and-safe"
+statement = "Pet imports reject unsafe paths, unsupported archive contents, and oversized or non-HTTPS URL imports while keeping third-party Petdex downloads local unless licenses are verified."
+evidence = ["src/sprite/loader.ts", "src/sprite/petdex.ts", "tests/importer.test.ts", "tests/petdex.test.ts", "README.md"]
+validation_checks = ["focused-unit-test", "unit-tests", "package-smoke"]
+
+[[components]]
+id = "workflow-commands"
+title = "Context, recap, and BTW commands"
+kind = "pi-commands"
+paths = ["src/context/**", "src/recap/**", "src/btw/**", "src/ui/overlay.ts", "tests/context.test.ts", "tests/recap.test.ts", "tests/btw.test.ts", "tests/e2e/**"]
+read_before_editing = ["README.md"]
+validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate", "e2e-gate"]
+
+[[components.invariants]]
+id = "btw-is-side-thread"
+statement = "BTW remains a user-invoked side conversation and injects content into the main thread only through explicit inject or summarize commands."
+evidence = ["src/btw/index.ts", "src/btw/session.ts", "tests/btw.test.ts", "README.md"]
+validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
+
+[[components.invariants]]
+id = "recap-is-compact-executive-summary"
+statement = "Recap output stays a compact executive summary with TL;DR, Recent work, Current status, and Next sections rather than an exhaustive transcript."
+evidence = ["src/recap/format.ts", "src/recap/index.ts", "tests/recap.test.ts", "README.md"]
+validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
+
+[[components]]
+id = "package-skills-examples"
+title = "Package metadata, skills, and examples"
+kind = "pi-package"
+paths = ["package.json", "package-lock.json", "skills/**", "examples/**", "README.md", "CHANGELOG.md", "LICENSE", "NOTICE.md", "tests/skill.test.ts", "tests/e2e/package-smoke.mjs"]
+read_before_editing = ["README.md", "NOTICE.md"]
+validation_checks = ["package-smoke", "unit-tests", "fast-gate", "e2e-gate"]
+
+[[components.invariants]]
+id = "package-files-are-installable"
+statement = "The published package includes extension, source, skill, example, README, license, notice, and changelog files needed for Pi install/discovery."
+evidence = ["package.json", "tests/e2e/package-smoke.mjs", "tests/skill.test.ts"]
+validation_checks = ["package-smoke", "fast-gate"]
+
+[[components]]
+id = "validation-contract"
+title = "Validation, CI, and HK config"
+kind = "validation"
+paths = [".github/**", ".mise/**", ".harness/**", "package.json", "tests/e2e/**", "docs/pi-sprite-implementation-spec.md", "README.md"]
+read_before_editing = ["README.md", "docs/pi-sprite-implementation-spec.md", ".harness/profiles/pi-sprite-root.toml"]
+validation_checks = ["hk-config-validate", "fast-gate", "e2e-gate"]
+
+[[components.invariants]]
+id = "ci-delegates-to-mise"
+statement = "GitHub Actions stays thin: setup through mise, Quality Gate delegates to mise run ci, and PR Full Validation delegates to mise run verify with artifacts uploaded."
+evidence = [".github/workflows/ci.yml", ".mise/tasks/ci", ".mise/tasks/verify", "package.json"]
+validation_checks = ["fast-gate", "e2e-gate"]
+
+[[components.invariants]]
+id = "system-map-is-advisory"
+statement = "HK profiles own commands, requiredness, and reviews; the system map only points agents at components, invariants, and relevant check labels."
+evidence = [".harness/profiles/pi-sprite-root.toml", ".harness/system.toml", ".harness/harness.toml"]
+validation_checks = ["hk-config-validate"]
+
+[[relations]]
+from = "extension-lifecycle"
+to = "sprite-runtime-rendering"
+kind = "drives"
+rule = "Extension events drive sprite state, footer status, and widget rendering; runtime cleanup must remain session-scoped."
+
+[[relations]]
+from = "workflow-commands"
+to = "sprite-runtime-rendering"
+kind = "updates-status"
+rule = "Context, recap, and BTW commands may update sprite state or footer activity but should not bypass runtime rendering/cleanup ownership."
+
+[[relations]]
+from = "package-skills-examples"
+to = "pet-import-gallery"
+kind = "documents-and-seeds"
+rule = "Skill/example assets may seed importable pet templates, while import security remains owned by sprite loader and Petdex code."

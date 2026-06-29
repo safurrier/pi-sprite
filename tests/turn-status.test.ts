@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+	formatLiveStatusFooter,
+	parseLiveStatusResponse,
+	promptForLiveStatus,
+} from "../src/sprite/live-status-format.ts";
+import {
 	formatTurnStatusFooter,
 	parseTurnStatusResponse,
 	recentConversationForTurnStatus,
@@ -32,6 +37,32 @@ test("builds recent conversation from branch entries with budget", () => {
 	];
 	const context = recentConversationForTurnStatus(entries, { maxMessages: 2, maxMessageChars: 20, maxTotalChars: 100 });
 	assert.equal(context, "assistant: second\n\nuser: third");
+});
+
+test("parses compact live status JSON", () => {
+	const status = parseLiveStatusResponse('{"label":"debugging renderer","detail":"Looking at native image cleanup."}');
+	assert.equal(status?.label, "debugging renderer");
+	assert.equal(formatLiveStatusFooter(status!), "🟣 debugging renderer…");
+});
+
+test("rejects invalid live status responses", () => {
+	assert.equal(parseLiveStatusResponse("not json"), undefined);
+	assert.equal(parseLiveStatusResponse('{"label":""}'), undefined);
+});
+
+test("rejects completion-like live status labels", () => {
+	assert.equal(parseLiveStatusResponse('{"label":"tests passed"}'), undefined);
+	assert.equal(parseLiveStatusResponse('{"label":"all done"}'), undefined);
+	assert.equal(parseLiveStatusResponse('{"label":"PR ready"}'), undefined);
+	assert.equal(parseLiveStatusResponse('{"label":"running tests"}')?.label, "running tests");
+});
+
+test("live status prompt stays provisional", () => {
+	const prompt = promptForLiveStatus("user: make this work");
+	assert.match(prompt, /provisional/u);
+	assert.match(prompt, /Do not claim the task is complete/u);
+	assert.match(prompt, /Do not add personality/u);
+	assert.match(prompt, /current activity/u);
 });
 
 test("keeps newest turn-status context when the total budget is tight", () => {

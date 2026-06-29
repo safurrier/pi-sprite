@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SpriteBubblePlacement } from "../ui/overlay.ts";
+import { formatLiveStatusFooter, type LiveTurnStatus } from "./live-status-format.ts";
 import { importPetFolder, importPetZip, listPets, loadPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 import { spriteHome, statePath } from "./paths.ts";
@@ -31,6 +32,8 @@ interface SavedState {
 	align?: SpriteAlign;
 	turnStatusEnabled?: boolean;
 	turnStatusConfigured?: boolean;
+	liveStatusEnabled?: boolean;
+	liveStatusConfigured?: boolean;
 }
 
 interface CompanionActivity {
@@ -51,6 +54,7 @@ const DEFAULT_SIZE: SpriteSize = "small";
 const DEFAULT_ALIGN: SpriteAlign = "right";
 const DEFAULT_LABEL = false;
 const DEFAULT_TURN_STATUS_ENABLED = true;
+const DEFAULT_LIVE_STATUS_ENABLED = true;
 
 function loadSaved(): SavedState {
 	try {
@@ -95,6 +99,10 @@ export function createSpriteRuntime() {
 	let turnStatusEnabled = DEFAULT_TURN_STATUS_ENABLED;
 	let turnStatusConfigured = false;
 	let turnStatus: TurnStatus | "pending" | undefined;
+	let liveStatusEnabled = DEFAULT_LIVE_STATUS_ENABLED;
+	let liveStatusConfigured = false;
+	let liveStatus: LiveTurnStatus | "pending" | undefined;
+	let liveStatusGeneration = 0;
 	let activity: CompanionActivity = { btwCount: 0, btwStatus: "idle", recapStatus: "idle" };
 	let resetTimer: ReturnType<typeof setTimeout> | undefined;
 	let clearWidgetTimer: ReturnType<typeof setTimeout> | undefined;
@@ -139,6 +147,9 @@ export function createSpriteRuntime() {
 		const recap = activityLabel("recap", activity.recapStatus);
 		if (btw) parts.push(btw);
 		if (recap) parts.push(recap);
+		if (liveStatusEnabled && liveStatus) {
+			parts.push(liveStatus === "pending" ? "live…" : formatLiveStatusFooter(liveStatus));
+		}
 		if (turnStatusEnabled && turnStatus) {
 			parts.push(turnStatus === "pending" ? "status…" : formatTurnStatusFooter(turnStatus));
 		}
@@ -265,7 +276,17 @@ export function createSpriteRuntime() {
 	}
 
 	function persist(): void {
-		saveSaved({ selectedPetId, visible, size, label, align, turnStatusEnabled, turnStatusConfigured });
+		saveSaved({
+			selectedPetId,
+			visible,
+			size,
+			label,
+			align,
+			turnStatusEnabled,
+			turnStatusConfigured,
+			liveStatusEnabled,
+			liveStatusConfigured,
+		});
 	}
 
 	function activatePet(id: string): void {
@@ -307,6 +328,10 @@ export function createSpriteRuntime() {
 			turnStatusEnabled = turnStatusConfigured
 				? (saved.turnStatusEnabled ?? DEFAULT_TURN_STATUS_ENABLED)
 				: DEFAULT_TURN_STATUS_ENABLED;
+			liveStatusConfigured = saved.liveStatusConfigured ?? false;
+			liveStatusEnabled = liveStatusConfigured
+				? (saved.liveStatusEnabled ?? DEFAULT_LIVE_STATUS_ENABLED)
+				: DEFAULT_LIVE_STATUS_ENABLED;
 			state = "idle";
 			render();
 		},
@@ -328,6 +353,9 @@ export function createSpriteRuntime() {
 		isTurnStatusEnabled() {
 			return turnStatusEnabled;
 		},
+		isLiveStatusEnabled() {
+			return liveStatusEnabled;
+		},
 		clearTurnStatus() {
 			turnStatus = undefined;
 			updateFooter();
@@ -339,7 +367,26 @@ export function createSpriteRuntime() {
 		},
 		setTurnStatus(status: TurnStatus | undefined) {
 			if (!turnStatusEnabled) return;
+			liveStatusGeneration++;
+			liveStatus = undefined;
 			turnStatus = status;
+			updateFooter();
+		},
+		clearLiveStatus() {
+			liveStatusGeneration++;
+			liveStatus = undefined;
+			updateFooter();
+		},
+		setLiveStatusPending() {
+			if (!liveStatusEnabled) return undefined;
+			liveStatusGeneration++;
+			liveStatus = "pending";
+			updateFooter();
+			return liveStatusGeneration;
+		},
+		setLiveStatus(status: LiveTurnStatus | undefined, generation = liveStatusGeneration) {
+			if (!liveStatusEnabled || generation !== liveStatusGeneration) return;
+			liveStatus = status;
 			updateFooter();
 		},
 		getBubblePlacement() {
@@ -363,7 +410,7 @@ export function createSpriteRuntime() {
 		registerCommands(pi: ExtensionAPI) {
 			pi.registerCommand("pet", {
 				description:
-					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | size <tiny|small|medium|large> | label <on|off> | align <left|right> | turn-status <on|off|clear> | clear-native",
+					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | size <tiny|small|medium|large> | label <on|off> | align <left|right> | turn-status <on|off|clear> | live-status <on|off|clear> | clear-native",
 				handler: async (args: string, commandCtx: ExtensionContext) => {
 					ctx = commandCtx;
 					const [cmd = "", ...rest] = args.trim().split(/\s+/u).filter(Boolean);
@@ -371,7 +418,7 @@ export function createSpriteRuntime() {
 					switch (cmd || "status") {
 						case "status":
 							commandCtx.ui.notify(
-								`pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}; size=${size}; label=${label ? "on" : "off"}; align=${align}; turn-status=${turnStatusEnabled ? "on" : "off"}${turnStatus && turnStatus !== "pending" ? `; ${formatTurnStatusFooter(turnStatus)}` : ""}`,
+								`pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}; size=${size}; label=${label ? "on" : "off"}; align=${align}; turn-status=${turnStatusEnabled ? "on" : "off"}; live-status=${liveStatusEnabled ? "on" : "off"}${turnStatus && turnStatus !== "pending" ? `; ${formatTurnStatusFooter(turnStatus)}` : ""}${liveStatus && liveStatus !== "pending" ? `; ${formatLiveStatusFooter(liveStatus)}` : ""}`,
 								"info",
 							);
 							break;
@@ -502,6 +549,26 @@ export function createSpriteRuntime() {
 							commandCtx.ui.notify(`pi-sprite turn status ${turnStatusEnabled ? "enabled" : "disabled"}.`, "info");
 							break;
 						}
+						case "live-status": {
+							if (value !== "on" && value !== "off" && value !== "clear") {
+								throw new Error("Usage: /pet live-status <on|off|clear>");
+							}
+							if (value === "clear") {
+								liveStatusGeneration++;
+								liveStatus = undefined;
+								updateFooter();
+								commandCtx.ui.notify("Cleared pi-sprite live status.", "info");
+								break;
+							}
+							liveStatusConfigured = true;
+							liveStatusEnabled = value === "on";
+							liveStatusGeneration++;
+							if (!liveStatusEnabled) liveStatus = undefined;
+							persist();
+							updateFooter();
+							commandCtx.ui.notify(`pi-sprite live status ${liveStatusEnabled ? "enabled" : "disabled"}.`, "info");
+							break;
+						}
 						case "clear-native": {
 							const clearLines = clearAllNativeSpriteImages();
 							if (clearLines.length) commandCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
@@ -511,7 +578,7 @@ export function createSpriteRuntime() {
 						}
 						default:
 							commandCtx.ui.notify(
-								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|size <tiny|small|medium|large>|label <on|off>|align <left|right>|turn-status <on|off|clear>|clear-native]",
+								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|size <tiny|small|medium|large>|label <on|off>|align <left|right>|turn-status <on|off|clear>|live-status <on|off|clear>|clear-native]",
 								"info",
 							);
 					}
