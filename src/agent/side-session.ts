@@ -79,13 +79,15 @@ export async function completeWithSideSession(
 						: { ok: false, reason: "empty", message: "Side session returned no assistant text." },
 				);
 			});
-			void session?.sendUserMessage(request.prompt).catch((error: unknown) => {
-				finish({
-					ok: false,
-					reason: "error",
-					message: error instanceof Error ? error.message : "Side session failed to start.",
+			void session
+				?.prompt(request.prompt, { expandPromptTemplates: false, source: "extension" })
+				.catch((error: unknown) => {
+					finish({
+						ok: false,
+						reason: "error",
+						message: error instanceof Error ? error.message : "Side session failed to start.",
+					});
 				});
-			});
 		});
 	} catch (error) {
 		return {
