@@ -1,8 +1,10 @@
 import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { completeWithSideSession } from "../agent/side-session.ts";
 import type { SpriteState } from "../sprite/manifest.ts";
 import { createScrollableSpeechBubble, type SpriteBubblePlacement } from "../ui/overlay.ts";
 import { recapSections, SYSTEM_PROMPT } from "./format.ts";
+import { generateRecapText, type RecapGenerationResult, recapPrompt } from "./generation.ts";
 
 type ActivityStatus = "idle" | "running" | "ready" | "error";
 
@@ -65,6 +67,33 @@ async function showRecap(
 		},
 	);
 }
+
+function completionText(response: Awaited<ReturnType<typeof complete>>): string {
+	return response.content
+		.filter((p): p is { type: "text"; text: string } => p.type === "text")
+		.map((p) => p.text)
+		.join("\n")
+		.trim();
+}
+
+async function completeRecapWithApiKey(ctx: ExtensionCommandContext, text: string): Promise<RecapGenerationResult> {
+	if (!ctx.model) return { ok: false, message: "No active model selected." };
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+	if (!auth.ok || !auth.apiKey) return { ok: false, message: auth.ok ? "No API key available." : auth.error };
+	const messages: Message[] = [
+		{ role: "user", content: [{ type: "text", text: recapPrompt(text) }], timestamp: Date.now() },
+	];
+	const response = await complete(
+		ctx.model,
+		{ systemPrompt: SYSTEM_PROMPT, messages },
+		{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 500 },
+	);
+	const recap = completionText(response);
+	return recap
+		? { ok: true, recap, source: "api-key-fallback" }
+		: { ok: false, message: "API-key fallback returned no recap text." };
+}
+
 export function registerRecapCommand(pi: ExtensionAPI, hooks: RecapHooks = {}) {
 	pi.registerCommand("recap", {
 		description: "Generate a compact session recap",
@@ -72,34 +101,22 @@ export function registerRecapCommand(pi: ExtensionAPI, hooks: RecapHooks = {}) {
 			if (!ctx.model) return ctx.ui.notify("No active model selected for /recap.", "warning");
 			const text = conversation(ctx);
 			if (!text) return ctx.ui.notify("No conversation to recap yet.", "info");
-			const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-			if (!auth.ok || !auth.apiKey)
-				return ctx.ui.notify(auth.ok ? "No API key available for current model." : auth.error, "error");
 			hooks.setState?.("thinking");
 			hooks.setRecapStatus?.("running");
 			try {
-				const messages: Message[] = [
-					{ role: "user", content: [{ type: "text", text: `Current session:\n\n${text}` }], timestamp: Date.now() },
-				];
-				const response = await complete(
-					ctx.model,
-					{ systemPrompt: SYSTEM_PROMPT, messages },
-					{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 500 },
-				);
-				const recap = response.content
-					.filter((p): p is { type: "text"; text: string } => p.type === "text")
-					.map((p) => p.text)
-					.join("\n")
-					.trim();
-				if (!recap) {
+				const result = await generateRecapText(ctx, text, {
+					sideSession: completeWithSideSession,
+					direct: completeRecapWithApiKey,
+				});
+				if (!result.ok) {
 					hooks.setState?.("error", { resetMs: 2500 });
 					hooks.setRecapStatus?.("error");
-					return ctx.ui.notify("Recap generation returned no text.", "warning");
+					return ctx.ui.notify(result.message, "error");
 				}
-				pi.appendEntry("pi-sprite:recap", { recap, timestamp: Date.now() });
+				pi.appendEntry("pi-sprite:recap", { recap: result.recap, source: result.source, timestamp: Date.now() });
 				hooks.setState?.("success", { resetMs: 1800 });
 				hooks.setRecapStatus?.("ready");
-				await showRecap(ctx, recap, hooks.getBubblePlacement?.(), hooks.getSpriteName?.());
+				await showRecap(ctx, result.recap, hooks.getBubblePlacement?.(), hooks.getSpriteName?.());
 			} catch (error) {
 				hooks.setState?.("error", { resetMs: 2500 });
 				hooks.setRecapStatus?.("error");
