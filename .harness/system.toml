@@ -62,20 +62,20 @@ validation_checks = ["focused-unit-test", "unit-tests", "package-smoke"]
 id = "workflow-commands"
 title = "Context, recap, and BTW commands"
 kind = "pi-commands"
-paths = ["src/context/**", "src/recap/**", "src/btw/**", "src/ui/overlay.ts", "tests/context.test.ts", "tests/recap.test.ts", "tests/btw.test.ts", "tests/e2e/**"]
+paths = ["src/context/**", "src/recap/**", "src/btw/**", "src/agent/**", "src/ui/overlay.ts", "tests/context.test.ts", "tests/recap.test.ts", "tests/btw.test.ts", "tests/side-session.test.ts", "tests/e2e/**"]
 read_before_editing = ["README.md"]
 validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate", "e2e-gate"]
 
 [[components.invariants]]
 id = "btw-is-side-thread"
 statement = "BTW remains a user-invoked side conversation and injects content into the main thread only through explicit inject or summarize commands."
-evidence = ["src/btw/index.ts", "src/btw/session.ts", "tests/btw.test.ts", "README.md"]
+evidence = ["src/btw/index.ts", "src/btw/session.ts", "src/agent/side-session.ts", "tests/btw.test.ts", "tests/side-session.test.ts", "README.md"]
 validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
 
 [[components.invariants]]
 id = "recap-is-compact-executive-summary"
 statement = "Recap output stays a compact executive summary with TL;DR, Recent work, Current status, and Next sections rather than an exhaustive transcript."
-evidence = ["src/recap/format.ts", "src/recap/index.ts", "tests/recap.test.ts", "README.md"]
+evidence = ["src/recap/format.ts", "src/recap/index.ts", "src/agent/side-session.ts", "tests/recap.test.ts", "tests/side-session.test.ts", "README.md"]
 validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
 
 [[components]]

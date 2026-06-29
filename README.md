@@ -148,7 +148,7 @@ Shows a Claude-Code-style TUI overlay with:
 /recap
 ```
 
-Generates a short executive-summary recap in a higher-contrast speech bubble anchored near the sprite and updates the Pi footer while it is running/ready. Use ↑/↓, j/k, space/d, or u to scroll longer recaps:
+Generates a short executive-summary recap in a higher-contrast speech bubble anchored near the sprite and updates the Pi footer while it is running/ready. Recap generation first uses an isolated, no-tools Pi side session with the current model, so it does not add normal user/assistant messages to the main thread. Direct API-key completion is kept only as a compatibility fallback. Use ↑/↓, j/k, space/d, or u to scroll longer recaps:
 
 ```text
 TL;DR: ...
