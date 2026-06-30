@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { classifyLiveTurnStatus } from "../src/sprite/live-status.ts";
 import {
 	formatLiveStatusFooter,
 	parseLiveStatusResponse,
 	promptForLiveStatus,
 } from "../src/sprite/live-status-format.ts";
+import { classifyTurnStatus } from "../src/sprite/turn-status.ts";
 import {
 	formatTurnStatusFooter,
 	parseTurnStatusResponse,
@@ -63,6 +65,65 @@ test("live status prompt stays provisional", () => {
 	assert.match(prompt, /Do not claim the task is complete/u);
 	assert.match(prompt, /Do not add personality/u);
 	assert.match(prompt, /current activity/u);
+});
+
+function fakeStatusContext(branch: unknown[] = []) {
+	return {
+		cwd: process.cwd(),
+		model: { provider: "test", model: "test-model", maxTokens: 1000 },
+		modelRegistry: {
+			getApiKeyAndHeaders: async () => ({ ok: false }),
+		},
+		sessionManager: {
+			getBranch: () => branch,
+		},
+	} as never;
+}
+
+test("turn status uses side-session completion before API-key fallback", async () => {
+	let directCalled = false;
+	const status = await classifyTurnStatus(
+		fakeStatusContext([{ type: "message", message: { role: "user", content: "ship it" } }]),
+		[{ role: "assistant", content: [{ type: "text", text: "Done." }] }],
+		{
+			sideSession: async (_ctx, request) => {
+				assert.match(request.prompt, /Final assistant response/u);
+				return { ok: true, text: '{"state":"done","label":"Wumpus ready"}' };
+			},
+			direct: async () => {
+				directCalled = true;
+				return undefined;
+			},
+		},
+	);
+	assert.equal(status?.state, "done");
+	assert.equal(status?.label, "Wumpus ready");
+	assert.equal(directCalled, false);
+});
+
+test("turn status falls back to direct completion when side session fails", async () => {
+	const status = await classifyTurnStatus(fakeStatusContext(), [], {
+		sideSession: async () => ({ ok: false, reason: "error", message: "side session unavailable" }),
+		direct: async () => '{"state":"followup","label":"reload Pi"}',
+	});
+	assert.equal(status?.state, "followup");
+	assert.equal(status?.label, "reload Pi");
+});
+
+test("live status uses side-session completion before API-key fallback", async () => {
+	let directCalled = false;
+	const status = await classifyLiveTurnStatus(fakeStatusContext(), {
+		sideSession: async (_ctx, request) => {
+			assert.match(request.prompt, /provisional/u);
+			return { ok: true, text: '{"label":"checking status"}' };
+		},
+		direct: async () => {
+			directCalled = true;
+			return undefined;
+		},
+	});
+	assert.equal(status?.label, "checking status");
+	assert.equal(directCalled, false);
 });
 
 test("keeps newest turn-status context when the total budget is tight", () => {

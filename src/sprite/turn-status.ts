@@ -1,5 +1,6 @@
-import { complete, type Message } from "@earendil-works/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { SideCompletionRequest, SideCompletionResult } from "../agent/side-session-types.ts";
 import {
 	extractTextContent,
 	parseTurnStatusResponse,
@@ -20,6 +21,14 @@ function finalAssistantText(messages: unknown[]): string {
 	}
 	return "";
 }
+
+type SideSessionAdapter = (ctx: ExtensionContext, request: SideCompletionRequest) => Promise<SideCompletionResult>;
+type DirectCompletionAdapter = (ctx: ExtensionContext, prompt: string) => Promise<string | undefined>;
+
+type TurnStatusAdapters = {
+	sideSession: SideSessionAdapter;
+	direct: DirectCompletionAdapter;
+};
 
 function promptForTurnStatus(recentConversation: string, finalResponse: string): string {
 	return [
@@ -60,14 +69,12 @@ async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | unde
 	});
 }
 
-export async function classifyTurnStatus(ctx: ExtensionContext, messages: unknown[]): Promise<TurnStatus | undefined> {
+async function directTurnStatusCompletion(ctx: ExtensionContext, prompt: string): Promise<string | undefined> {
 	if (!ctx.model) return undefined;
 	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
 	if (!auth.ok || !auth.apiKey) return undefined;
-	const recentConversation = recentConversationForTurnStatus(ctx.sessionManager.getBranch() as Iterable<unknown>);
-	const finalResponse = finalAssistantText(messages);
-	const prompt = promptForTurnStatus(recentConversation, finalResponse);
 	const request = async () => {
+		const { complete } = await import("@earendil-works/pi-ai");
 		const model = {
 			...ctx.model!,
 			maxTokens: Math.min(ctx.model!.maxTokens ?? TURN_STATUS_MAX_TOKENS, TURN_STATUS_MAX_TOKENS),
@@ -77,12 +84,37 @@ export async function classifyTurnStatus(ctx: ExtensionContext, messages: unknow
 			{ messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }] as Message[] },
 			{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: TURN_STATUS_MAX_TOKENS },
 		);
-		const text = response.content
+		return response.content
 			.filter((part): part is { type: "text"; text: string } => part.type === "text")
 			.map((part) => part.text)
 			.join("\n")
 			.trim();
-		return parseTurnStatusResponse(text);
 	};
 	return await withTimeout(request(), TURN_STATUS_TIMEOUT_MS);
+}
+
+const defaultAdapters: TurnStatusAdapters = {
+	sideSession: async (ctx, request) => {
+		const { completeWithSideSession } = await import("../agent/side-session.ts");
+		return await completeWithSideSession(ctx, request);
+	},
+	direct: directTurnStatusCompletion,
+};
+
+export async function classifyTurnStatus(
+	ctx: ExtensionContext,
+	messages: unknown[],
+	adapters: TurnStatusAdapters = defaultAdapters,
+): Promise<TurnStatus | undefined> {
+	const recentConversation = recentConversationForTurnStatus(ctx.sessionManager.getBranch() as Iterable<unknown>);
+	const finalResponse = finalAssistantText(messages);
+	const prompt = promptForTurnStatus(recentConversation, finalResponse);
+	const sideResult = await adapters.sideSession(ctx, {
+		prompt,
+		maxTokens: TURN_STATUS_MAX_TOKENS,
+		timeoutMs: TURN_STATUS_TIMEOUT_MS,
+	});
+	if (sideResult.ok) return parseTurnStatusResponse(sideResult.text);
+	const directText = await adapters.direct(ctx, prompt);
+	return directText ? parseTurnStatusResponse(directText) : undefined;
 }
