@@ -91,7 +91,12 @@ Regenerate any state with major drift in identity, silhouette, face, signature p
 
 ## Optional animation pass
 
-After the static five-state pet works, ask whether the user wants an animated version. Keep animation subtle; terminal pets read best when the character identity stays fixed and only a few pixels or the whole body bob changes.
+After the static five-state pet works, ask whether the user wants an animated version. Offer two levels:
+
+1. **Simple motion** — no image API needed. Reuse one accepted image per state and create subtle bob/shift strips. This is safest for character consistency.
+2. **Expressive keyframes** — generate or draw per-frame differences, such as eye shifts, head tilts, prop twinkles, or sprite-specific details. This is higher quality but must pass the cohesion review because identity drift is easier.
+
+Keep animation subtle; terminal pets read best when the character identity stays fixed and only a few pixels, the whole body, or one sprite-specific feature changes. Do not blindly use feature examples like leaf bob or tail wag unless that character actually has the feature.
 
 Recommended frame counts:
 
@@ -118,7 +123,29 @@ error:     4 frames — worried blink or small droop
 }
 ```
 
-Assemble cleaned frames into a strip:
+For simple motion, create a strip from one accepted state image:
+
+```bash
+uv run --with pillow python skills/pi-sprite-authoring/scripts/create_motion_strip.py \
+  --input /tmp/wumpus/clean/thinking.png \
+  --output /tmp/wumpus/pet/thinking-strip.png \
+  --metadata /tmp/wumpus/pet/thinking-strip.metadata.json \
+  --preset thinking-bob \
+  --frame-width 128 \
+  --frame-height 128
+```
+
+Useful simple presets:
+
+```text
+bob
+thinking-bob
+working-tap
+success-bounce
+error-droop
+```
+
+For expressive keyframes, generate or draw cleaned frames first, then assemble them into a strip:
 
 ```bash
 uv run --with pillow python skills/pi-sprite-authoring/scripts/assemble_sprite_strip.py \

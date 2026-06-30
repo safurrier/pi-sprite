@@ -28,6 +28,7 @@ test("pi-sprite authoring skill has discoverable metadata and resources", () => 
 	assert.match(skill, /scripts\/openai_sprite_image\.py/u);
 	assert.match(skill, /scripts\/remove_sprite_background\.py/u);
 	assert.match(skill, /scripts\/assemble_sprite_strip\.py/u);
+	assert.match(skill, /scripts\/create_motion_strip\.py/u);
 	assert.ok(existsSync(join(skillRoot, "references", "wumpus-sprite-prompts.md")));
 	assert.ok(existsSync(join(skillRoot, "references", "petdex-reference-to-custom-pet.md")));
 	assert.ok(existsSync(join(skillRoot, "references", "gpt-image-sprite-workflow.md")));
@@ -38,6 +39,7 @@ test("pi-sprite authoring skill has discoverable metadata and resources", () => 
 	assert.ok(existsSync(join(skillRoot, "scripts", "openai_sprite_image.py")));
 	assert.ok(existsSync(join(skillRoot, "scripts", "remove_sprite_background.py")));
 	assert.ok(existsSync(join(skillRoot, "scripts", "assemble_sprite_strip.py")));
+	assert.ok(existsSync(join(skillRoot, "scripts", "create_motion_strip.py")));
 });
 
 test("create-pet-template script writes an importable Wumpus manifest", async () => {
@@ -138,6 +140,11 @@ test("local image helpers expose agent-friendly help", async () => {
 	});
 	assert.equal(assemble.status, 0, assemble.stderr);
 	assert.match(assemble.stdout, /Assemble pi-sprite frame PNGs/u);
+	const motion = spawnSync("python3", [join(skillRoot, "scripts", "create_motion_strip.py"), "--help"], {
+		encoding: "utf8",
+	});
+	assert.equal(motion.status, 0, motion.stderr);
+	assert.match(motion.stdout, /Create a simple pi-sprite motion strip/u);
 });
 
 test("OpenAI sprite helper supports help and dry-run metadata without an API key", async () => {
