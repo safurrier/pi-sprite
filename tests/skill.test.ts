@@ -27,6 +27,7 @@ test("pi-sprite authoring skill has discoverable metadata and resources", () => 
 	assert.match(skill, /references\/character-cohesion-review\.md/u);
 	assert.match(skill, /scripts\/openai_sprite_image\.py/u);
 	assert.match(skill, /scripts\/remove_sprite_background\.py/u);
+	assert.match(skill, /scripts\/assemble_sprite_strip\.py/u);
 	assert.ok(existsSync(join(skillRoot, "references", "wumpus-sprite-prompts.md")));
 	assert.ok(existsSync(join(skillRoot, "references", "petdex-reference-to-custom-pet.md")));
 	assert.ok(existsSync(join(skillRoot, "references", "gpt-image-sprite-workflow.md")));
@@ -36,6 +37,7 @@ test("pi-sprite authoring skill has discoverable metadata and resources", () => 
 	assert.ok(existsSync(join(skillRoot, "scripts", "download-petdex-examples.mjs")));
 	assert.ok(existsSync(join(skillRoot, "scripts", "openai_sprite_image.py")));
 	assert.ok(existsSync(join(skillRoot, "scripts", "remove_sprite_background.py")));
+	assert.ok(existsSync(join(skillRoot, "scripts", "assemble_sprite_strip.py")));
 });
 
 test("create-pet-template script writes an importable Wumpus manifest", async () => {
@@ -124,12 +126,18 @@ test("Petdex downloader ignores unsafe manifest slugs", async () => {
 	}
 });
 
-test("background cleanup helper exposes agent-friendly help", async () => {
+test("local image helpers expose agent-friendly help", async () => {
 	const { spawnSync } = await import("node:child_process");
-	const script = join(skillRoot, "scripts", "remove_sprite_background.py");
-	const help = spawnSync("python3", [script, "--help"], { encoding: "utf8" });
-	assert.equal(help.status, 0, help.stderr);
-	assert.match(help.stdout, /Remove an edge-connected background/u);
+	const cleanup = spawnSync("python3", [join(skillRoot, "scripts", "remove_sprite_background.py"), "--help"], {
+		encoding: "utf8",
+	});
+	assert.equal(cleanup.status, 0, cleanup.stderr);
+	assert.match(cleanup.stdout, /Remove an edge-connected background/u);
+	const assemble = spawnSync("python3", [join(skillRoot, "scripts", "assemble_sprite_strip.py"), "--help"], {
+		encoding: "utf8",
+	});
+	assert.equal(assemble.status, 0, assemble.stderr);
+	assert.match(assemble.stdout, /Assemble pi-sprite frame PNGs/u);
 });
 
 test("OpenAI sprite helper supports help and dry-run metadata without an API key", async () => {

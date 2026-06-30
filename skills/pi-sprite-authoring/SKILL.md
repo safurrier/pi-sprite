@@ -21,8 +21,9 @@ Create importable `pi-sprite` pet folders from generated, reference-driven, or h
 9. Use the canonical anchor as the primary `character_reference` for `thinking`, `working`, `success`, and `error`; use Petdex or other third-party references only as secondary style/scale references.
 10. Run a character-cohesion review against the canonical anchor before packaging. Regenerate states with major drift. Read `references/character-cohesion-review.md` when a reusable review prompt would help.
 11. If generated outputs lack alpha, run local background cleanup before packaging; keep the original generated files and metadata.
-12. Create a pet folder containing `pet.json` plus accepted image files.
-13. Import with a single slash command, `/pet import <folder>`, then run follow-up commands separately: `/pet clear-native`, `/pet show`, `/pet size small`, and `/pet label off`.
+12. Ask whether the user wants an animated version. If yes, create subtle per-state frame strips and add `frame.width`/`frame.height` to `pet.json`.
+13. Create a pet folder containing `pet.json` plus accepted image files or strips.
+14. Import with a single slash command, `/pet import <folder>`, then run follow-up commands separately: `/pet clear-native`, `/pet show`, `/pet size small`, and `/pet label off`.
 
 ## Direction-card format
 
@@ -87,6 +88,49 @@ Canonical anchor: path/to/idle.png
 ```
 
 Regenerate any state with major drift in identity, silhouette, face, signature props, palette, or outline thickness. Pose and expression should change; the character design should not. For a reusable human/vision-model review prompt, use `references/character-cohesion-review.md`.
+
+## Optional animation pass
+
+After the static five-state pet works, ask whether the user wants an animated version. Keep animation subtle; terminal pets read best when the character identity stays fixed and only a few pixels or the whole body bob changes.
+
+Recommended frame counts:
+
+```text
+idle:      4 frames — blink, breathing, or leaf/ear bob
+thinking:  4 frames — slight head tilt or eye shift
+working:   6 frames — paw/key tap loop
+success:   5 frames — bounce or sparkle twinkle
+error:     4 frames — worried blink or small droop
+```
+
+`pi-sprite` supports per-state horizontal strips when `pet.json` includes a frame size:
+
+```json
+{
+  "sprites": {
+    "idle": "idle-strip.png",
+    "thinking": "thinking-strip.png",
+    "working": "working-strip.png",
+    "success": "success-strip.png",
+    "error": "error-strip.png"
+  },
+  "frame": { "width": 128, "height": 128 }
+}
+```
+
+Assemble cleaned frames into a strip:
+
+```bash
+uv run --with pillow python skills/pi-sprite-authoring/scripts/assemble_sprite_strip.py \
+  --frame /tmp/wumpus/frames/idle-0.png \
+  --frame /tmp/wumpus/frames/idle-1.png \
+  --frame /tmp/wumpus/frames/idle-2.png \
+  --frame /tmp/wumpus/frames/idle-3.png \
+  --output /tmp/wumpus/pet/idle-strip.png \
+  --metadata /tmp/wumpus/pet/idle-strip.metadata.json \
+  --frame-width 128 \
+  --frame-height 128
+```
 
 ## Background cleanup
 
@@ -170,6 +214,18 @@ working-dir/
     └── error.png
 ```
 
+For animated pets, use strips and record the frame size:
+
+```text
+custom-sprite/
+├── pet.json
+├── idle-strip.png
+├── thinking-strip.png
+├── working-strip.png
+├── success-strip.png
+└── error-strip.png
+```
+
 Use this manifest shape:
 
 ```json
@@ -195,6 +251,7 @@ Use this manifest shape:
 - Keep each state visually consistent: same pose scale, outline, palette, and canvas size.
 - Avoid text, shadows, busy props, and tiny facial details.
 - Record prompt files and reference instructions next to generated assets.
+- For animated strips, keep frame size consistent and verify `pet.json` has `frame.width` and `frame.height`.
 - Test in native and ANSI fallback modes when possible:
 
 ```text
