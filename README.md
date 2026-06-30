@@ -148,7 +148,7 @@ Shows a Claude-Code-style TUI overlay with:
 /recap
 ```
 
-Generates a short executive-summary recap in a higher-contrast speech bubble anchored near the sprite and updates the Pi footer while it is running/ready. Recap generation first uses an isolated, no-tools Pi side session with the current model, so it does not add normal user/assistant messages to the main thread. Direct API-key completion is kept only as a compatibility fallback. Use ↑/↓, j/k, space/d, or u to scroll longer recaps:
+Generates a short executive-summary recap in a higher-contrast speech bubble anchored near the sprite. Recap generation first uses an isolated, no-tools Pi side session with the current model, so it does not add normal user/assistant messages to the main thread. Direct API-key completion is kept only as a compatibility fallback. Use ↑/↓, j/k, space/d, or u to scroll longer recaps:
 
 ```text
 TL;DR: ...
@@ -169,7 +169,7 @@ Next: ...
 /btw:summarize
 ```
 
-BTW is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups; `/btw` reopens the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread. The footer shows BTW running/ready state, and answers appear in a compact speech bubble that points toward the sprite. Use ↑/↓, j/k, space/d, or u to scroll longer answers. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
+BTW is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups; `/btw` reopens the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread. Answers appear in an interactive speech bubble that points toward the sprite without advertising BTW state in the Pi footer. Use ↑/↓ and page keys to scroll longer answers. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
 
 ## Non-features
 

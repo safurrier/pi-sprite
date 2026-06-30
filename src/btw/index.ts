@@ -1,7 +1,12 @@
 import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SpriteState } from "../sprite/manifest.ts";
-import { createScrollableSpeechBubble, type OverlaySection, type SpriteBubblePlacement } from "../ui/overlay.ts";
+import {
+	createReplyableSpeechBubble,
+	createScrollableSpeechBubble,
+	type OverlaySection,
+	type SpriteBubblePlacement,
+} from "../ui/overlay.ts";
 import { type BtwCompletionAdapters, completeBtwText } from "./completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
 import { answerWithSideSession, summarizeWithSideSession } from "./session.ts";
@@ -94,30 +99,70 @@ async function showBtw(
 				"↵ close · esc close · ↑/↓ scroll · /btw:inject · /btw:summarize",
 				theme,
 				done,
-				{ tail: placement.tail, maxBodyLines: 12, minWidth: 48, maxWidth: 76 },
+				{ tail: placement.tail, maxBodyLines: 14, minWidth: 56, maxWidth: 104 },
 			),
 		{
 			overlay: true,
 			overlayOptions: {
-				width: "48%",
-				minWidth: 48,
-				maxHeight: "82%",
+				width: "64%",
+				minWidth: 56,
+				maxHeight: "88%",
 				anchor: placement.anchor,
 				margin: placement.margin,
 			},
 		},
 	);
 }
+async function showInteractiveBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, hooks: BtwHooks = {}): Promise<void> {
+	const speakerName = hooks.getSpriteName?.() ?? "Sprite";
+	const placement = hooks.getBubblePlacement?.() ?? { anchor: "center", tail: "none", margin: {} };
+	await ctx.ui.custom(
+		(tui, theme, _kb, done) =>
+			createReplyableSpeechBubble(
+				`${speakerName} side thread`,
+				formatThreadSections(thread, speakerName),
+				theme,
+				done,
+				{
+					tail: placement.tail,
+					maxBodyLines: 12,
+					minWidth: 56,
+					maxWidth: 104,
+					requestRender: () => tui.requestRender(),
+					onSubmit: async (text) => {
+						await askSideQuestion(pi, text, ctx, hooks, { showBubble: false });
+						return formatThreadSections(thread, speakerName);
+					},
+				},
+			),
+		{
+			overlay: true,
+			overlayOptions: {
+				width: "64%",
+				minWidth: 56,
+				maxHeight: "88%",
+				anchor: placement.anchor,
+				margin: placement.margin,
+			},
+		},
+	);
+}
+
 async function askSideQuestion(
 	pi: ExtensionAPI,
 	question: string,
 	ctx: ExtensionCommandContext,
 	hooks: BtwHooks = {},
-	options: { persist?: boolean; includeThread?: boolean } = {},
+	options: { persist?: boolean; includeThread?: boolean; showBubble?: boolean } = {},
 ): Promise<void> {
 	const persist = options.persist ?? true;
 	const includeThread = options.includeThread ?? persist;
-	if (!ctx.model) return ctx.ui.notify("No active model selected for /btw.", "warning");
+	const showBubble = options.showBubble ?? true;
+	if (!ctx.model) {
+		const message = "No active model selected for /btw.";
+		if (!showBubble) throw new Error(message);
+		return ctx.ui.notify(message, "warning");
+	}
 	const prompt = [
 		persist
 			? "You are continuing a side conversation for a Pi coding session. This side thread stays outside the main thread unless the user later injects it."
@@ -138,9 +183,11 @@ async function askSideQuestion(
 	try {
 		const answer = await completeBtwText(ctx, prompt, 1200, defaultCompletionAdapters);
 		if (!answer) {
+			const message = "BTW response returned no text.";
 			hooks.setState?.("error", { resetMs: 2500 });
 			hooks.setBtwStatus?.("error", thread.length);
-			return ctx.ui.notify("BTW response returned no text.", "warning");
+			if (!showBubble) throw new Error(message);
+			return ctx.ui.notify(message, "warning");
 		}
 		const entry = { question, answer, timestamp: Date.now() };
 		if (persist) {
@@ -149,19 +196,23 @@ async function askSideQuestion(
 		}
 		hooks.setState?.("success", { resetMs: 1800 });
 		hooks.setBtwStatus?.(thread.length ? "ready" : "idle", thread.length);
-		const speakerName = hooks.getSpriteName?.() ?? "Sprite";
-		await showBtw(
-			ctx,
-			persist
-				? formatThreadSections(thread, speakerName)
-				: [
+		if (showBubble) {
+			const speakerName = hooks.getSpriteName?.() ?? "Sprite";
+			if (persist) {
+				await showInteractiveBtw(pi, ctx, hooks);
+			} else {
+				await showBtw(
+					ctx,
+					[
 						{ title: "One-off question", body: question, accent: "muted" },
 						{ title: speakerName, body: answer, accent: "accent" },
 					],
-			hooks.getBubblePlacement?.(),
-			speakerName,
-			persist ? `${speakerName} side thread` : `${speakerName} says`,
-		);
+					hooks.getBubblePlacement?.(),
+					speakerName,
+					`${speakerName} says`,
+				);
+			}
+		}
 	} catch (error) {
 		hooks.setState?.("error", { resetMs: 2500 });
 		hooks.setBtwStatus?.("error", thread.length);
@@ -193,16 +244,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 		description: "Continue the BTW side conversation outside the main thread",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const question = args.trim();
-			const speakerName = hooks.getSpriteName?.() ?? "Sprite";
-			if (!question) {
-				return showBtw(
-					ctx,
-					formatThreadSections(thread, speakerName),
-					hooks.getBubblePlacement?.(),
-					speakerName,
-					`${speakerName} side thread`,
-				);
-			}
+			if (!question) return showInteractiveBtw(pi, ctx, hooks);
 			await askSideQuestion(pi, question, ctx, hooks);
 		},
 	});
@@ -221,7 +263,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 			pi.appendEntry(RESET, { timestamp: Date.now() });
 			hooks.setBtwStatus?.("idle", 0);
 			if (args.trim()) await askSideQuestion(pi, args.trim(), ctx, hooks);
-			else ctx.ui.notify("Started a fresh BTW thread.", "info");
+			else await showInteractiveBtw(pi, ctx, hooks);
 		},
 	});
 	pi.registerCommand("btw:clear", {

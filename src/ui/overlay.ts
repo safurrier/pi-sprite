@@ -1,5 +1,6 @@
 import {
 	type Component,
+	decodeKittyPrintable,
 	Key,
 	matchesKey,
 	type OverlayAnchor,
@@ -37,6 +38,12 @@ export interface SpeechBubbleOptions {
 	maxBodyLines?: number;
 	maxWidth?: number;
 	minWidth?: number;
+	footerRows?: string[];
+}
+
+export interface ReplyableSpeechBubbleOptions extends SpeechBubbleOptions {
+	requestRender?: () => void;
+	onSubmit: (text: string) => Promise<OverlaySection[]>;
 }
 
 interface RenderedSpeechBubble {
@@ -126,6 +133,7 @@ export function renderSpeechBubble(
 	const scroll = Math.max(0, Math.min(options.scroll ?? 0, maxScroll));
 	const visibleBodyRows = bodyRows.slice(scroll, scroll + maxBodyLines);
 	const lines = [topBorder(title, totalWidth, theme), ...visibleBodyRows];
+	for (const row of options.footerRows ?? []) lines.push(contentRow(row, contentWidth, theme));
 	lines.push(
 		contentRow(theme.fg("dim", scrollHint(hints, scroll, maxBodyLines, bodyRows.length)), contentWidth, theme),
 	);
@@ -167,6 +175,134 @@ export function createScrollableSpeechBubble(
 			else if (matchesKey(data, "g")) scroll = 0;
 			else if (matchesKey(data, Key.shift("g"))) scroll = maxScroll;
 			clamp();
+		},
+	};
+}
+
+function inputBoxRows(draft: string, busy: boolean, contentWidth: number, theme: ThemeLike): string[] {
+	const label = busy ? " Thinking " : " Reply ";
+	const topPrefix = `╭─${label}`;
+	const top = `${topPrefix}${"─".repeat(Math.max(0, contentWidth - visibleWidth(topPrefix) - 1))}╮`;
+	const value = busy
+		? theme.fg("muted", "Thinking…")
+		: draft
+			? theme.fg("text", draft)
+			: theme.fg("dim", "Type a follow-up…");
+	const inputWidth = Math.max(1, contentWidth - 4);
+	const input = `│ ${pad(truncateToWidth(`${value}${busy ? "" : "▌"}`, inputWidth), inputWidth)} │`;
+	const bottom = `╰${"─".repeat(Math.max(0, contentWidth - 2))}╯`;
+	return [theme.fg("borderMuted", top), input, theme.fg("borderMuted", bottom)];
+}
+
+function printableInput(data: string): string {
+	const decoded = decodeKittyPrintable(data);
+	if (decoded !== undefined) return decoded;
+	const pasteText =
+		data.includes("\u001b[200~") || data.includes("\u001b[201~")
+			? data.replaceAll("\u001b[200~", "").replaceAll("\u001b[201~", "")
+			: data;
+	if (pasteText.includes("\u001b")) return "";
+	return Array.from(pasteText)
+		.filter((char) => {
+			const code = char.codePointAt(0) ?? 0;
+			return code >= 32 && code !== 127 && !(code >= 0x80 && code <= 0x9f);
+		})
+		.join("");
+}
+
+export function createReplyableSpeechBubble(
+	title: string,
+	initialSections: OverlaySection[],
+	theme: ThemeLike,
+	done: (result: undefined) => void,
+	options: ReplyableSpeechBubbleOptions,
+): Component {
+	let sections = initialSections;
+	let draft = "";
+	let scroll = 0;
+	let maxScroll = 0;
+	let busy = false;
+	let error: string | undefined;
+	let scrollToBottom = true;
+	const pageSize = () => Math.max(1, (options.maxBodyLines ?? 12) - 2);
+	const clamp = () => {
+		scroll = Math.max(0, Math.min(scroll, maxScroll));
+	};
+	const refresh = () => {
+		options.requestRender?.();
+	};
+	const submit = async () => {
+		const text = draft.trim();
+		if (!text || busy) return;
+		draft = "";
+		busy = true;
+		error = undefined;
+		scrollToBottom = true;
+		refresh();
+		try {
+			sections = await options.onSubmit(text);
+		} catch (err) {
+			error = err instanceof Error ? err.message : "Reply failed.";
+		} finally {
+			busy = false;
+			scrollToBottom = true;
+			refresh();
+		}
+	};
+	return {
+		render: (width: number) => {
+			const displaySections = [...sections];
+			if (busy)
+				displaySections.push({ title: title.replace(/ side thread$/u, ""), body: "Thinking…", accent: "muted" });
+			if (error) displaySections.push({ title: "Reply failed", body: error, accent: "error" });
+			const { contentWidth } = dimensions(width, options);
+			const footerRows = inputBoxRows(draft, busy, contentWidth, theme);
+			const hint = busy ? "esc close · ↑/↓ scroll" : "↵ send · esc close · ↑/↓ scroll · ctrl-u clear";
+			const rendered = renderSpeechBubble(title, displaySections, hint, width, theme, {
+				...options,
+				scroll,
+				footerRows,
+			});
+			maxScroll = rendered.maxScroll;
+			if (scrollToBottom) {
+				scroll = maxScroll;
+				scrollToBottom = false;
+			} else {
+				clamp();
+			}
+			return renderSpeechBubble(title, displaySections, hint, width, theme, { ...options, scroll, footerRows }).lines;
+		},
+		invalidate: () => {},
+		handleInput: (data: string) => {
+			if (matchesKey(data, "escape")) {
+				done(undefined);
+				return;
+			}
+			if (matchesKey(data, "enter") || matchesKey(data, "return")) {
+				void submit();
+				return;
+			}
+			if (matchesKey(data, Key.ctrl("u"))) {
+				draft = "";
+				refresh();
+				return;
+			}
+			if (matchesKey(data, "backspace") || matchesKey(data, Key.backspace)) {
+				draft = draft.slice(0, -1);
+				refresh();
+				return;
+			}
+			if (matchesKey(data, "up")) scroll--;
+			else if (matchesKey(data, "down")) scroll++;
+			else if (matchesKey(data, "pageUp")) scroll -= pageSize();
+			else if (matchesKey(data, "pageDown")) scroll += pageSize();
+			else {
+				const text = printableInput(data);
+				if (!text || busy) return;
+				draft = `${draft}${text}`.slice(0, 500);
+			}
+			clamp();
+			refresh();
 		},
 	};
 }
