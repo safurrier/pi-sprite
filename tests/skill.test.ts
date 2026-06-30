@@ -181,9 +181,13 @@ test("OpenAI sprite helper supports help and dry-run metadata without an API key
 			assert.equal(metadata.method, "edit");
 			assert.equal(metadata.background, "auto");
 			assert.equal(metadata.image_path, null);
+			assert.equal(metadata.reference_bindings_in_prompt, true);
 			assert.equal(metadata.references[0].path, reference);
 			assert.equal(metadata.references[0].role, "style_reference");
 			assert.match(metadata.references[0].instruction, /silhouette scale/u);
+			const effectivePrompt = readFileSync(metadata.prompt_path, "utf8");
+			assert.match(effectivePrompt, /REFERENCE IMAGE BINDINGS/u);
+			assert.match(effectivePrompt, /style_reference: Use for silhouette scale/u);
 		} finally {
 			if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
 			else process.env.OPENAI_API_KEY = previousKey;

@@ -122,7 +122,18 @@ def image_data_to_b64(item: Any) -> str | None:
     return None
 
 
-def generate_image(args: argparse.Namespace, prompt: str) -> tuple[bytes, str | None]:
+def prompt_with_reference_bindings(prompt: str, references: list[dict[str, str]]) -> str:
+    if not references:
+        return prompt
+    lines = [prompt, "", "REFERENCE IMAGE BINDINGS:"]
+    for index, reference in enumerate(references, start=1):
+        lines.append(f"{index}. {reference['role']}: {reference['instruction']}")
+    lines.append("")
+    lines.append("Use these bindings when interpreting the attached images. Preserve character_reference identity exactly; use style_reference, scale_reference, plush_reference, modern_style_reference, and other non-character references only for their stated instruction.")
+    return "\n".join(lines)
+
+
+def generate_image(args: argparse.Namespace, prompt: str, references: list[dict[str, str]]) -> tuple[bytes, str | None]:
     if not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY is required unless --dry-run is set")
     try:
@@ -133,7 +144,7 @@ def generate_image(args: argparse.Namespace, prompt: str) -> tuple[bytes, str | 
     client = OpenAI()
     kwargs: dict[str, Any] = {
         "model": args.model,
-        "prompt": prompt,
+        "prompt": prompt_with_reference_bindings(prompt, references),
         "size": args.size,
         "quality": args.quality,
         "output_format": args.output_format,
@@ -163,12 +174,13 @@ def write_outputs(args: argparse.Namespace, prompt: str, references: list[dict[s
     method = "edit" if args.reference_image else "generate"
     image_path: Path | None = None
     if not args.dry_run:
-        image_bytes, method = generate_image(args, prompt)
+        image_bytes, method = generate_image(args, prompt, references)
         image_path = base.with_suffix(f".{args.output_format}")
         image_path.write_bytes(image_bytes)
 
+    effective_prompt = prompt_with_reference_bindings(prompt, references)
     prompt_path = base.with_suffix(".prompt.txt")
-    prompt_path.write_text(prompt + "\n", encoding="utf-8")
+    prompt_path.write_text(effective_prompt + "\n", encoding="utf-8")
     metadata = {
         "dry_run": args.dry_run,
         "method": method,
@@ -178,6 +190,7 @@ def write_outputs(args: argparse.Namespace, prompt: str, references: list[dict[s
         "output_format": args.output_format,
         "background": args.background,
         "prompt_path": str(prompt_path),
+        "reference_bindings_in_prompt": bool(references),
         "image_path": str(image_path) if image_path else None,
         "references": references,
     }

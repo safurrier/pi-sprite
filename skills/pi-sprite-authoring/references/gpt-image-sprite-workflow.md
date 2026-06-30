@@ -115,7 +115,7 @@ uv run --with openai python skills/pi-sprite-authoring/scripts/openai_sprite_ima
   --prefix idle
 ```
 
-The helper uses image generation when no references are supplied and image edit when references are supplied. It defaults to `--background auto` because some current GPT Image models reject transparent-background requests; pass `--background transparent` only with a model that supports it. The helper writes output images, prompt copies, and metadata, and records the background setting.
+The helper uses image generation when no references are supplied and image edit when references are supplied. It appends reference roles/instructions to the effective prompt sent to OpenAI, so the model can distinguish the canonical `character_reference` from style/scale references. It defaults to `--background auto` because some current GPT Image models reject transparent-background requests; pass `--background transparent` only with a model that supports it. The helper writes output images, prompt copies, and metadata, and records the background setting.
 
 For anchor-based generation with multiple references, pass each reference with its own role and instruction in order:
 
