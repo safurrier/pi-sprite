@@ -2,6 +2,7 @@ import {
 	createAgentSession,
 	createExtensionRuntime,
 	type ExtensionCommandContext,
+	type ExtensionContext,
 	type ResourceLoader,
 	SessionManager,
 } from "@earendil-works/pi-coding-agent";
@@ -36,7 +37,7 @@ function sideResourceLoader(systemPrompt?: string): ResourceLoader {
 }
 
 export async function completeWithSideSession(
-	ctx: ExtensionCommandContext,
+	ctx: ExtensionCommandContext | ExtensionContext,
 	request: SideCompletionRequest,
 ): Promise<SideCompletionResult> {
 	if (!ctx.model) return { ok: false, reason: "no-model", message: "No active model selected." };
