@@ -1,9 +1,10 @@
-import { complete, type Message } from "@earendil-works/pi-ai";
+import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SpriteState } from "../sprite/manifest.ts";
 import { createScrollableSpeechBubble, type OverlaySection, type SpriteBubblePlacement } from "../ui/overlay.ts";
+import { type BtwCompletionAdapters, completeBtwText } from "./completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
-import { answerWithSideSession } from "./session.ts";
+import { answerWithSideSession, summarizeWithSideSession } from "./session.ts";
 
 const ENTRY = "pi-sprite:btw-entry";
 const RESET = "pi-sprite:btw-reset";
@@ -17,6 +18,29 @@ interface BtwHooks {
 }
 
 let thread: BtwEntry[] = [];
+
+async function directCompletion(
+	ctx: ExtensionCommandContext,
+	prompt: string,
+	maxTokens: number,
+): Promise<string | undefined> {
+	if (!ctx.model) return undefined;
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
+	if (!auth.ok || !auth.apiKey) return undefined;
+	const { complete } = await import("@earendil-works/pi-ai");
+	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
+	const response = await complete(ctx.model, { messages }, { apiKey: auth.apiKey, headers: auth.headers, maxTokens });
+	return response.content
+		.filter((p): p is { type: "text"; text: string } => p.type === "text")
+		.map((p) => p.text)
+		.join("\n")
+		.trim();
+}
+
+const defaultCompletionAdapters: BtwCompletionAdapters = {
+	sideSession: async (ctx, prompt, maxTokens) => await answerWithSideSession(ctx, prompt, { maxTokens }),
+	direct: directCompletion,
+};
 
 function isCustom(entry: unknown, type: string): entry is { type: "custom"; customType: string; data?: unknown } {
 	return Boolean(
@@ -94,9 +118,6 @@ async function askSideQuestion(
 	const persist = options.persist ?? true;
 	const includeThread = options.includeThread ?? persist;
 	if (!ctx.model) return ctx.ui.notify("No active model selected for /btw.", "warning");
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-	if (!auth.ok || !auth.apiKey)
-		return ctx.ui.notify(auth.ok ? "No API key available for current model." : auth.error, "error");
 	const prompt = [
 		persist
 			? "You are continuing a side conversation for a Pi coding session. This side thread stays outside the main thread unless the user later injects it."
@@ -115,20 +136,7 @@ async function askSideQuestion(
 	hooks.setState?.("thinking");
 	hooks.setBtwStatus?.("running", thread.length);
 	try {
-		let answer = await answerWithSideSession(ctx, prompt);
-		if (!answer) {
-			const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
-			const response = await complete(
-				ctx.model,
-				{ messages },
-				{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 1200 },
-			);
-			answer = response.content
-				.filter((p): p is { type: "text"; text: string } => p.type === "text")
-				.map((p) => p.text)
-				.join("\n")
-				.trim();
-		}
+		const answer = await completeBtwText(ctx, prompt, 1200, defaultCompletionAdapters);
 		if (!answer) {
 			hooks.setState?.("error", { resetMs: 2500 });
 			hooks.setBtwStatus?.("error", thread.length);
@@ -162,30 +170,10 @@ async function askSideQuestion(
 }
 async function summarizeThread(ctx: ExtensionCommandContext): Promise<string> {
 	if (!ctx.model) throw new Error("No active model selected.");
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-	if (!auth.ok || !auth.apiKey) throw new Error(auth.ok ? "No API key available for current model." : auth.error);
-	const messages: Message[] = [
-		{
-			role: "user",
-			content: [
-				{
-					type: "text",
-					text: `Summarize this side thread for injection into a coding-agent main session. Preserve decisions, risks, and next actions.\n\n${formatThread(thread)}`,
-				},
-			],
-			timestamp: Date.now(),
-		},
-	];
-	const response = await complete(
-		ctx.model,
-		{ messages },
-		{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 700 },
-	);
-	return response.content
-		.filter((p): p is { type: "text"; text: string } => p.type === "text")
-		.map((p) => p.text)
-		.join("\n")
-		.trim();
+	const prompt = `Summarize this side thread for injection into a coding-agent main session. Preserve decisions, risks, and next actions.\n\n${formatThread(thread)}`;
+	const summary = (await summarizeWithSideSession(ctx, prompt)) || (await directCompletion(ctx, prompt, 700));
+	if (!summary) throw new Error("BTW summary returned no text.");
+	return summary;
 }
 function sendToMain(pi: ExtensionAPI, ctx: ExtensionCommandContext, content: string): void {
 	if (ctx.isIdle()) pi.sendUserMessage(content);
