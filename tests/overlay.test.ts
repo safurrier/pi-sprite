@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { renderSpeechBubble } from "../src/ui/overlay.ts";
+import { createReplyableSpeechBubble, renderSpeechBubble } from "../src/ui/overlay.ts";
 
 const theme = {
 	fg: (_color: string, text: string) => text,
@@ -30,6 +30,103 @@ test("renders a bottom-left speech bubble tail", () => {
 		{ tail: "bottom-left", maxBodyLines: 8 },
 	).lines;
 	assert.match(rendered.at(-1) ?? "", /╭─╯/u);
+});
+
+test("replyable speech bubble submits follow-up and updates in place", async () => {
+	let renderRequests = 0;
+	const component = createReplyableSpeechBubble(
+		"Wumpus side thread",
+		[{ title: "Wumpus", body: "First answer" }],
+		theme,
+		() => {},
+		{
+			tail: "bottom-right",
+			maxBodyLines: 8,
+			requestRender: () => renderRequests++,
+			onSubmit: async (text) => [
+				{ title: "Wumpus", body: "First answer" },
+				{ title: "You · 2", body: text, accent: "muted" },
+				{ title: "Wumpus", body: "Second answer" },
+			],
+		},
+	);
+
+	component.handleInput?.("\u001b[106;1u"); // Kitty CSI-u printable "j"
+	for (const char of "uke dog") component.handleInput?.(char);
+	assert.match(component.render(80).join("\n"), /juke dog/u);
+	component.handleInput?.("\r");
+	assert.match(component.render(80).join("\n"), /Thinking/u);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const rendered = component.render(80).join("\n");
+	assert.match(rendered, /You · 2/u);
+	assert.match(rendered, /juke dog/u);
+	assert.match(rendered, /Second answer/u);
+	assert.ok(renderRequests >= 2);
+});
+
+test("replyable speech bubble ignores unmatched escape control sequences", () => {
+	const component = createReplyableSpeechBubble(
+		"Wumpus side thread",
+		[{ title: "Wumpus", body: "First answer" }],
+		theme,
+		() => {},
+		{
+			tail: "bottom-right",
+			maxBodyLines: 8,
+			onSubmit: async () => [],
+		},
+	);
+
+	component.handleInput?.("h");
+	component.handleInput?.("\u001b[C"); // Right arrow should not append "[C".
+	component.handleInput?.("\u001b[3~"); // Delete should not append "[3~".
+	component.handleInput?.("i");
+
+	const rendered = component.render(80).join("\n");
+	assert.match(rendered, /hi/u);
+	assert.doesNotMatch(rendered, /\[C|\[3~/u);
+});
+
+test("replyable speech bubble accepts bracketed paste text", () => {
+	const component = createReplyableSpeechBubble(
+		"Wumpus side thread",
+		[{ title: "Wumpus", body: "First answer" }],
+		theme,
+		() => {},
+		{
+			tail: "bottom-right",
+			maxBodyLines: 8,
+			onSubmit: async () => [],
+		},
+	);
+
+	component.handleInput?.("\u001b[200~pasted reply\u001b[201~");
+
+	assert.match(component.render(80).join("\n"), /pasted reply/u);
+});
+
+test("replyable speech bubble shows reply errors without closing", async () => {
+	const component = createReplyableSpeechBubble(
+		"Wumpus side thread",
+		[{ title: "Wumpus", body: "First answer" }],
+		theme,
+		() => {},
+		{
+			tail: "bottom-right",
+			maxBodyLines: 8,
+			onSubmit: async () => {
+				throw new Error("model unavailable");
+			},
+		},
+	);
+
+	component.handleInput?.("f");
+	component.handleInput?.("\r");
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const rendered = component.render(80).join("\n");
+	assert.match(rendered, /Reply failed/u);
+	assert.match(rendered, /model unavailable/u);
+	assert.match(rendered, /First answer/u);
 });
 
 test("scrolls long speech bubble bodies while keeping chrome visible", () => {

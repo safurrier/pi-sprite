@@ -111,6 +111,23 @@ test("cleared live status ignores stale classifier result", async () => {
 	});
 });
 
+test("btw and recap activity do not advertise in the Pi footer", async () => {
+	await withSpriteHome(async () => {
+		const statuses: string[] = [];
+		const runtime = createSpriteRuntime();
+		await runtime.start(fakeContext(statuses));
+
+		runtime.setBtwStatus("running", 1);
+		assert.doesNotMatch(statuses.at(-1) ?? "", /btw/u);
+		runtime.setBtwStatus("ready", 1);
+		assert.doesNotMatch(statuses.at(-1) ?? "", /btw/u);
+		runtime.setRecapStatus("running");
+		assert.doesNotMatch(statuses.at(-1) ?? "", /recap/u);
+		runtime.setRecapStatus("ready");
+		assert.doesNotMatch(statuses.at(-1) ?? "", /recap/u);
+	});
+});
+
 test("final turn status clears provisional live status", async () => {
 	await withSpriteHome(async () => {
 		const statuses: string[] = [];

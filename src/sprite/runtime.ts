@@ -128,14 +128,6 @@ export function createSpriteRuntime() {
 		return lines;
 	}
 
-	function activityLabel(name: "btw" | "recap", status: ActivityStatus, count = 0): string | undefined {
-		if (status === "running") return `${name}…`;
-		if (status === "error") return `${name} error`;
-		if (name === "btw" && count > 0) return status === "ready" ? `btw ${count} ready` : `btw ${count}`;
-		if (name === "recap" && status === "ready") return "recap ready";
-		return undefined;
-	}
-
 	function updateFooter(currentCtx = ctx): void {
 		if (!currentCtx?.hasUI) return;
 		if (!visible) {
@@ -143,10 +135,6 @@ export function createSpriteRuntime() {
 			return;
 		}
 		const parts = [`🐾 ${selectedName()} ${state}`];
-		const btw = activityLabel("btw", activity.btwStatus, activity.btwCount);
-		const recap = activityLabel("recap", activity.recapStatus);
-		if (btw) parts.push(btw);
-		if (recap) parts.push(recap);
 		if (liveStatusEnabled && liveStatus) {
 			parts.push(liveStatus === "pending" ? "live…" : formatLiveStatusFooter(liveStatus));
 		}
