@@ -12,6 +12,12 @@ import {
 	visibleWidth,
 } from "@earendil-works/pi-tui";
 import sharp from "sharp";
+import {
+	clearKittyPlaceholderCaches,
+	KittyPlaceholderSpriteWidget,
+	setTerminalGraphicsSinkForTests,
+	type TerminalGraphicsSink,
+} from "./kitty-placeholder.ts";
 import type { InstalledPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 
@@ -57,6 +63,7 @@ const STATE_TO_ATLAS_ROW: Record<SpriteState, { row: number; frames: number }> =
 };
 const DISABLE_NATIVE_IMAGE_VALUES = new Set(["0", "false", "off", "none", "ansi"]);
 const KITTY_NATIVE_IMAGE_VALUES = new Set(["1", "true", "on", "kitty"]);
+const KITTY_PLACEHOLDER_NATIVE_IMAGE_VALUES = new Set(["placeholder", "kitty-placeholder"]);
 const TMUX_PASSTHROUGH_PREFIX = "\u001bPtmux;";
 const TMUX_PASSTHROUGH_SUFFIX = "\u001b\\";
 const TUI_IMAGE_CLEANUP_GUARD_SEQUENCE = "\u001b_Ga=d,d=I,i=0,q=2\u001b\\";
@@ -229,14 +236,30 @@ function terminalSupportsKittyControl(): boolean {
 	return getCapabilities().images === "kitty" || outerTerminalSupportsKittyImages();
 }
 
-function spriteImageProtocol(): "kitty" | "iterm2" | null {
+export type SpriteNativeImageMode = "ansi" | "direct" | "placeholder";
+
+export function spriteNativeImageMode(): SpriteNativeImageMode {
 	const setting = explicitNativeImageSetting();
-	if (DISABLE_NATIVE_IMAGE_VALUES.has(setting)) return null;
-	if (KITTY_NATIVE_IMAGE_VALUES.has(setting)) return "kitty";
+	if (DISABLE_NATIVE_IMAGE_VALUES.has(setting)) return "ansi";
+	if (KITTY_PLACEHOLDER_NATIVE_IMAGE_VALUES.has(setting)) {
+		return terminalSupportsKittyControl() ? "placeholder" : "ansi";
+	}
 	const protocol = getCapabilities().images;
-	if (protocol === "kitty" || protocol === "iterm2") return protocol;
-	if (isTmux() && outerTerminalSupportsKittyImages()) return "kitty";
-	return null;
+	if (KITTY_NATIVE_IMAGE_VALUES.has(setting)) {
+		return terminalSupportsKittyControl() || protocol === "iterm2" ? "direct" : "ansi";
+	}
+	if (protocol === "kitty" || protocol === "iterm2") return "direct";
+	if (isTmux() && outerTerminalSupportsKittyImages()) return "direct";
+	return "ansi";
+}
+
+function spriteImageProtocol(): "kitty" | "iterm2" | null {
+	const mode = spriteNativeImageMode();
+	if (mode === "ansi") return null;
+	if (mode === "placeholder") return "kitty";
+	const protocol = getCapabilities().images;
+	if (protocol === "iterm2") return protocol;
+	return "kitty";
 }
 
 function wrapTmuxPassthrough(sequence: string): string {
@@ -376,7 +399,29 @@ export function buildTextSpriteWidget(lines: string[], options: SpriteRenderOpti
 }
 
 export function supportsNativeSpriteImages(): boolean {
-	return spriteImageProtocol() !== null;
+	return spriteNativeImageMode() !== "ansi";
+}
+
+export function usesKittyPlaceholderSpriteImages(): boolean {
+	return spriteNativeImageMode() === "placeholder";
+}
+
+export function setSpriteTerminalGraphicsSinkForTests(sink: TerminalGraphicsSink | undefined): void {
+	setTerminalGraphicsSinkForTests(sink);
+}
+
+export function clearSpriteTerminalGraphicsCaches(): void {
+	clearKittyPlaceholderCaches();
+}
+
+export function buildKittyPlaceholderSpriteWidget(
+	frames: NativeSpriteFrame[],
+	activeFrameIndex: number,
+	statusLine: string,
+	imageIds: number[],
+	options: SpriteRenderOptions = {},
+): Component {
+	return new KittyPlaceholderSpriteWidget(frames, activeFrameIndex, imageIds, statusLine, preset(options), options);
 }
 
 export function buildNativeSpriteWidget(

@@ -112,13 +112,19 @@ Live status is also on by default. During long-running agent turns, `pi-sprite` 
 
 Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
 
-Inside tmux, Kitty/Ghostty graphics are terminal-level placements, not tmux text cells. `pi-sprite` still enables native images in known Kitty-capable tmux terminals because that is the useful Ghostty workflow, but it treats tmux as managed mode: use stable per-pane image ids, clear stale ids on startup, and draw the next animation frame before deleting the previous one. Make sure tmux allows passthrough:
+Inside tmux, direct Kitty/Ghostty graphics are terminal-level placements, not tmux text cells. `pi-sprite` still enables native images in known Kitty-capable tmux terminals because that is the useful Ghostty workflow, but it treats tmux as managed mode: use stable per-pane image ids, clear stale ids on startup, and draw the next animation frame before deleting the previous one. Make sure tmux allows passthrough:
 
 ```tmux
 set -g allow-passthrough on
 ```
 
-If old native placements from earlier versions are still stuck, run `/pet clear-native` once, then `/pet show`. That command intentionally asks the terminal to delete visible Kitty images. If native image passthrough keeps misbehaving, force the ANSI fallback with:
+If old native placements from earlier versions are still stuck, run `/pet clear-native` once, then `/pet show`. That command intentionally asks the terminal to delete visible Kitty images. If direct native image passthrough keeps misbehaving in tmux, try the experimental Kitty Unicode placeholder backend. It uploads frames quietly and renders the visible sprite as placeholder text cells so tmux can move them with the pane grid:
+
+```bash
+export PI_SPRITE_NATIVE_IMAGES=placeholder
+```
+
+Force the ANSI fallback with:
 
 ```bash
 export PI_SPRITE_NATIVE_IMAGES=0

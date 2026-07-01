@@ -5,6 +5,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { setCapabilities } from "@earendil-works/pi-tui";
 import sharp from "sharp";
+import { placeholderGlyph } from "../src/sprite/kitty-placeholder.ts";
+import { setSpriteTerminalGraphicsSinkForTests } from "../src/sprite/renderer.ts";
 import { createSpriteRuntime, nativeSpriteCleanupImageIds, stableNativeImageId } from "../src/sprite/runtime.ts";
 
 async function withSpriteHome<T>(fn: (home: string) => Promise<T> | T): Promise<T> {
@@ -57,6 +59,7 @@ test("uses one stable native image id per tmux pane across cwd changes", () => {
 			assert.equal(stableNativeImageId(), first);
 			assert.ok(nativeSpriteCleanupImageIds().includes(first));
 			assert.ok(nativeSpriteCleanupImageIds().includes(first + 1));
+			assert.ok(nativeSpriteCleanupImageIds().includes(first + 15));
 			assert.notDeepEqual(nativeSpriteCleanupImageIds(), firstCleanupIds);
 		} finally {
 			process.chdir(originalCwd);
@@ -248,6 +251,93 @@ test("final turn status clears provisional live status", async () => {
 		assert.match(footer, /tests passed/u);
 		assert.doesNotMatch(footer, /running tests/u);
 	});
+});
+
+test("placeholder mode renders widget placeholders and writes graphics commands out of band", async () => {
+	const previousHome = process.env.PI_SPRITE_HOME;
+	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
+	const home = mkdtempSync(join(tmpdir(), "pi-sprite-runtime-"));
+	const writes: string[] = [];
+	let runtime: ReturnType<typeof createSpriteRuntime> | undefined;
+	try {
+		process.env.PI_SPRITE_HOME = home;
+		process.env.PI_SPRITE_NATIVE_IMAGES = "placeholder";
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		setSpriteTerminalGraphicsSinkForTests({ write: (sequence) => writes.push(sequence) });
+		const petDir = join(home, "pets", "placeholder-pet");
+		mkdirSync(petDir, { recursive: true });
+		await sharp({ create: { width: 8, height: 4, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+			.composite([
+				{
+					input: Buffer.from('<svg width="4" height="4"><rect width="4" height="4" fill="#ff00ff"/></svg>'),
+					left: 0,
+					top: 0,
+				},
+				{
+					input: Buffer.from('<svg width="4" height="4"><rect width="4" height="4" fill="#00ffff"/></svg>'),
+					left: 4,
+					top: 0,
+				},
+			])
+			.png()
+			.toFile(join(petDir, "idle-strip.png"));
+		writeFileSync(
+			join(petDir, "pet.json"),
+			JSON.stringify({
+				id: "placeholder-pet",
+				name: "Placeholder Pet",
+				sprites: { idle: "idle-strip.png" },
+				frame: { width: 4, height: 4 },
+			}),
+		);
+		writeFileSync(join(home, "state.json"), JSON.stringify({ selectedPetId: "placeholder-pet", visible: true }));
+
+		const widgets: unknown[] = [];
+		runtime = createSpriteRuntime();
+		await runtime.start(fakeContext([], widgets));
+		await new Promise((resolve) => setTimeout(resolve, 30));
+
+		const widgetFactory = widgets.find(
+			(widget): widget is () => { render(width: number): string[] } => typeof widget === "function",
+		);
+		assert.ok(widgetFactory);
+		const rendered = widgetFactory().render(40).join("\n");
+		assert.ok(rendered.includes(placeholderGlyph()));
+		assert.equal(rendered.includes("\u001b_G"), false);
+		assert.equal(writes.filter((write) => write.includes("a=t")).length, 2);
+		assert.equal(writes.filter((write) => write.includes("U=1")).length, 2);
+
+		const previousRendered = rendered;
+		await new Promise((resolve) => setTimeout(resolve, 430));
+		const nextWidgetFactory = [...widgets]
+			.reverse()
+			.find((widget: unknown): widget is () => { render(width: number): string[] } => typeof widget === "function");
+		assert.ok(nextWidgetFactory);
+		assert.notEqual(nextWidgetFactory().render(40).join("\n"), previousRendered);
+
+		const widgetCountBeforeClear = widgets.length;
+		let commandHandler: ((args: string, ctx: never) => Promise<void>) | undefined;
+		runtime.registerCommands({
+			registerCommand(_name: string, command: { handler: (args: string, ctx: never) => Promise<void> }) {
+				commandHandler = command.handler;
+			},
+		} as never);
+		const clearWidgets: unknown[] = [];
+		await commandHandler!("clear-native", fakeContext([], clearWidgets));
+		const clearText = clearWidgets.flatMap((widget) => (Array.isArray(widget) ? widget : [])).join("\n");
+		assert.match(clearText, /a=d,d=I/u);
+		await new Promise((resolve) => setTimeout(resolve, 430));
+		assert.equal(widgets.length, widgetCountBeforeClear);
+	} finally {
+		runtime?.shutdown();
+		setSpriteTerminalGraphicsSinkForTests(undefined);
+		if (previousHome === undefined) delete process.env.PI_SPRITE_HOME;
+		else process.env.PI_SPRITE_HOME = previousHome;
+		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+		rmSync(home, { recursive: true, force: true });
+	}
 });
 
 test("native startup reserves blank cells instead of drawing ANSI loading art", async () => {
