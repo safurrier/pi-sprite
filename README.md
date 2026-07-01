@@ -76,7 +76,7 @@ Minimal `pet.json`:
 }
 ```
 
-Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprite` renders image-backed pets as compact terminal art, cycles multi-frame spritesheets, infers standard Petdex 8x9 atlases for `spritesheet.*`, and uses Pi TUI native images on Kitty/iTerm2-capable terminals with ANSI half-block fallback elsewhere.
+Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprite` renders image-backed pets as compact terminal art, cycles multi-frame spritesheets, infers standard Petdex 8x9 atlases for `spritesheet.*`, and uses native Kitty placeholder images on Kitty/Ghostty-capable terminals with ANSI half-block fallback elsewhere.
 
 By default, the sprite is compact, right-aligned, and label-free so it stays out of the main text flow. The pet/state label lives in Pi's footer status line instead. Use `/pet size ...`, `/pet label on`, or `/pet align left` if you want a larger or more explicit widget.
 
@@ -110,19 +110,13 @@ Turn status is on by default. After each agent turn, `pi-sprite` runs a tiny no-
 
 Live status is also on by default. During long-running agent turns, `pi-sprite` waits five minutes, then runs a tiny no-tools side classifier for a provisional in-progress footer such as `🟣 running tests…` or `🟣 debugging renderer…`. It never claims completion; the final turn status replaces it when the agent turn ends. Use `/pet live-status off` to disable it, `/pet live-status on` to re-enable it, or `/pet live-status clear` to clear the current live footer status.
 
-Ghostty exposes the Kitty image protocol, so `pi-sprite` can render native images when Pi runs directly in Ghostty/Kitty/iTerm2-capable terminals.
-
-Inside tmux, direct Kitty/Ghostty graphics are terminal-level placements, not tmux text cells. `pi-sprite` still enables native images in known Kitty-capable tmux terminals because that is the useful Ghostty workflow, but it treats tmux as managed mode: use stable per-pane image ids, clear stale ids on startup, and draw the next animation frame before deleting the previous one. Make sure tmux allows passthrough:
+Ghostty exposes the Kitty image protocol, so `pi-sprite` renders native images automatically in Kitty/Ghostty-capable terminals, including inside tmux. It uses Kitty Unicode placeholders: frames are uploaded quietly, while the visible sprite is rendered as placeholder text cells that tmux can move with the pane grid. Make sure tmux allows passthrough:
 
 ```tmux
 set -g allow-passthrough on
 ```
 
-If old native placements from earlier versions are still stuck, run `/pet clear-native` once, then `/pet show`. That command intentionally asks the terminal to delete visible Kitty images. If direct native image passthrough keeps misbehaving in tmux, try the experimental Kitty Unicode placeholder backend. It uploads frames quietly and renders the visible sprite as placeholder text cells so tmux can move them with the pane grid:
-
-```bash
-export PI_SPRITE_NATIVE_IMAGES=placeholder
-```
+If old native placements from earlier versions are still stuck, run `/pet clear-native` once, then `/pet show`. That command intentionally asks the terminal to delete visible Kitty images.
 
 Force the ANSI fallback with:
 

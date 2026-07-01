@@ -62,8 +62,6 @@ const STATE_TO_ATLAS_ROW: Record<SpriteState, { row: number; frames: number }> =
 	error: { row: 5, frames: PETDEX_FRAME_COUNTS.failed },
 };
 const DISABLE_NATIVE_IMAGE_VALUES = new Set(["0", "false", "off", "none", "ansi"]);
-const KITTY_NATIVE_IMAGE_VALUES = new Set(["1", "true", "on", "kitty"]);
-const KITTY_PLACEHOLDER_NATIVE_IMAGE_VALUES = new Set(["placeholder", "kitty-placeholder"]);
 const TMUX_PASSTHROUGH_PREFIX = "\u001bPtmux;";
 const TMUX_PASSTHROUGH_SUFFIX = "\u001b\\";
 const TUI_IMAGE_CLEANUP_GUARD_SEQUENCE = "\u001b_Ga=d,d=I,i=0,q=2\u001b\\";
@@ -241,16 +239,7 @@ export type SpriteNativeImageMode = "ansi" | "direct" | "placeholder";
 export function spriteNativeImageMode(): SpriteNativeImageMode {
 	const setting = explicitNativeImageSetting();
 	if (DISABLE_NATIVE_IMAGE_VALUES.has(setting)) return "ansi";
-	if (KITTY_PLACEHOLDER_NATIVE_IMAGE_VALUES.has(setting)) {
-		return terminalSupportsKittyControl() ? "placeholder" : "ansi";
-	}
-	const protocol = getCapabilities().images;
-	if (KITTY_NATIVE_IMAGE_VALUES.has(setting)) {
-		return terminalSupportsKittyControl() || protocol === "iterm2" ? "direct" : "ansi";
-	}
-	if (protocol === "kitty" || protocol === "iterm2") return "direct";
-	if (isTmux() && outerTerminalSupportsKittyImages()) return "direct";
-	return "ansi";
+	return terminalSupportsKittyControl() ? "placeholder" : "ansi";
 }
 
 function spriteImageProtocol(): "kitty" | "iterm2" | null {

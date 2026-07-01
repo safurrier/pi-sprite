@@ -176,7 +176,7 @@ test("auto-enables native sprite images inside known Kitty-capable tmux terminal
 	}
 });
 
-test("allows explicit native sprite image opt-in inside tmux", () => {
+test("native Kitty widget wraps control sequences inside tmux", () => {
 	const previousTmux = process.env.TMUX;
 	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
 	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
@@ -243,7 +243,7 @@ test("native placeholder reserves label row", () => {
 	assert.equal(formatNativeSpritePlaceholderLines([], { size: "small", label: true }).length, 5);
 });
 
-test("placeholder image mode is selected only when explicitly requested and Kitty control is available", () => {
+test("placeholder image mode is the default when Kitty control is available", () => {
 	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
 	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
 	const previousKitty = process.env.KITTY_WINDOW_ID;
@@ -251,15 +251,12 @@ test("placeholder image mode is selected only when explicitly requested and Kitt
 	const previousTerminalEmulator = process.env.TERMINAL_EMULATOR;
 	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
 	try {
-		process.env.PI_SPRITE_NATIVE_IMAGES = "placeholder";
-		assert.equal(spriteNativeImageMode(), "placeholder");
-		process.env.PI_SPRITE_NATIVE_IMAGES = "kitty-placeholder";
+		delete process.env.PI_SPRITE_NATIVE_IMAGES;
 		assert.equal(spriteNativeImageMode(), "placeholder");
 		process.env.PI_SPRITE_NATIVE_IMAGES = "1";
-		assert.equal(spriteNativeImageMode(), "direct");
-		setCapabilities({ images: "iterm2", trueColor: true, hyperlinks: true });
-		assert.equal(spriteNativeImageMode(), "direct");
-		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+		assert.equal(spriteNativeImageMode(), "placeholder");
+		process.env.PI_SPRITE_NATIVE_IMAGES = "placeholder";
+		assert.equal(spriteNativeImageMode(), "placeholder");
 		process.env.PI_SPRITE_NATIVE_IMAGES = "0";
 		assert.equal(spriteNativeImageMode(), "ansi");
 		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
@@ -267,7 +264,7 @@ test("placeholder image mode is selected only when explicitly requested and Kitt
 		delete process.env.KITTY_WINDOW_ID;
 		delete process.env.TERM_PROGRAM;
 		delete process.env.TERMINAL_EMULATOR;
-		process.env.PI_SPRITE_NATIVE_IMAGES = "placeholder";
+		delete process.env.PI_SPRITE_NATIVE_IMAGES;
 		assert.equal(spriteNativeImageMode(), "ansi");
 	} finally {
 		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
