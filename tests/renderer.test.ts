@@ -111,7 +111,8 @@ test("Kitty placeholder widget writes uploads out of band and animates by swappi
 		const second = buildKittyPlaceholderSpriteWidget(frames, 1, "status", [42, 43], { size: "tiny" }).render(20);
 		const rendered = [...first, ...second].join("\n");
 
-		assert.equal(writes.filter((write) => write.includes("a=t")).length, 2);
+		assert.equal(writes.filter((write) => write.includes("a=t")).length, 3);
+		assert.equal(writes.filter((write) => write.includes("i=43")).length, 3);
 		assert.equal(writes.filter((write) => write.includes("U=1")).length, 2);
 		assert.ok(first.join("\n").includes(placeholderGlyph()));
 		assert.ok(second.join("\n").includes(placeholderGlyph()));

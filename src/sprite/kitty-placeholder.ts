@@ -389,9 +389,10 @@ export function uploadKittyPlaceholderFrame(
 	imageId: number,
 	columns: number,
 	rows: number,
+	options: { forceUpload?: boolean } = {},
 ): void {
 	const imageKey = `${imageId}:${frame.base64}`;
-	if (uploadedImages.get(imageId) !== imageKey) {
+	if (options.forceUpload || uploadedImages.get(imageId) !== imageKey) {
 		graphicsSink.write(kittySequence(encodeKittyPlaceholderUpload(frame, imageId)));
 		uploadedImages.set(imageId, imageKey);
 	}
@@ -404,6 +405,8 @@ export function uploadKittyPlaceholderFrame(
 }
 
 export class KittyPlaceholderSpriteWidget {
+	private activeFrameUploaded = false;
+
 	constructor(
 		private readonly frames: NativeSpriteFrame[],
 		private readonly activeFrameIndex: number,
@@ -418,12 +421,18 @@ export class KittyPlaceholderSpriteWidget {
 	render(width: number): string[] {
 		const columns = Math.max(1, Math.min(width - 2, this.configuredSize.columns));
 		const rows = this.configuredSize.rows;
+		const activeIndex = this.activeFrameIndex % Math.max(1, this.frames.length);
+		const activeImageId = this.imageIds[activeIndex % this.imageIds.length] ?? this.imageIds[0] ?? 1;
+		const activeFrame = this.frames[activeIndex];
+		if (activeFrame && activeImageId && !this.activeFrameUploaded) {
+			uploadKittyPlaceholderFrame(activeFrame, activeImageId, columns, rows, { forceUpload: true });
+			this.activeFrameUploaded = true;
+		}
 		for (const [index, frame] of this.frames.entries()) {
 			const imageId = this.imageIds[index] ?? this.imageIds[0];
-			if (!imageId) continue;
+			if (!imageId || index === activeIndex) continue;
 			uploadKittyPlaceholderFrame(frame, imageId, columns, rows);
 		}
-		const activeImageId = this.imageIds[this.activeFrameIndex % this.imageIds.length] ?? this.imageIds[0] ?? 1;
 		const align = this.options.align ?? "left";
 		const lines = placeholderGridLines(columns, rows, activeImageId).map((line) => alignLine(line, width, align));
 		if (!this.options.label) return lines;
