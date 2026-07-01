@@ -1,39 +1,64 @@
 # pi-sprite
 
-A tiny Codex-style sprite companion for [Pi](https://pi.dev), plus three small workflow commands:
+`pi-sprite` is a small Pi package that adds a terminal sprite, a context visualizer, a recap bubble, and a side-question thread to [Pi](https://pi.dev).
 
-```text
-/pet      sprite selection and local import
-/context  Claude-style context usage visualizer
-/recap    compact session recap
-/btw      side question thread
-```
+It is intentionally not a pet simulator or desktop companion. The sprite is there to make agent state easier to read without adding another dashboard.
 
-`pi-sprite` is intentionally small. It is not a pet simulator, desktop companion, voice assistant, or dashboard suite.
+## Quick start from this checkout
 
-## Install
-
-During development:
+Run Pi with the local extension while developing:
 
 ```bash
-pi -e ~/worktrees/pi-sprite
+cd /path/to/pi-sprite
+pi -e .
 ```
 
-From git once stable:
+In Pi, check the sprite and available pets:
+
+```text
+/pet
+/pet list
+```
+
+If native images ever get stuck after changing renderers or restarting tmux, clean the terminal image layer and redraw:
+
+```text
+/pet clear-native
+/pet show
+```
+
+For a git install after this branch is stable:
 
 ```bash
 pi install git:github.com/safurrier/pi-sprite
 ```
 
-## Commands
+## What you get
 
-### `/pet`
+| Command | Use it for |
+| --- | --- |
+| `/pet` | Show, hide, choose, import, and configure the sprite. |
+| `/context` | Open a Claude-style context usage visualizer. |
+| `/recap` | Generate a compact recap of the current session in a speech bubble. |
+| `/btw` | Ask side questions without adding normal messages to the main thread. |
+
+The extension also updates the sprite automatically during agent turns:
+
+- `thinking` while the agent is reasoning
+- `working` while tools run
+- `success` or `error` after turn/tool outcomes
+- compact footer status after turns, with provisional live status during long-running turns
+
+## Sprite behavior
+
+By default the sprite is compact, right-aligned, and label-free. The pet/state label lives in Pi's footer status line instead of taking more space in the widget.
+
+Useful `/pet` commands:
 
 ```text
-/pet
+/pet status
 /pet list
 /pet choose <id>
-/pet import <path>
 /pet hide
 /pet show
 /pet size tiny|small|medium|large
@@ -41,6 +66,7 @@ pi install git:github.com/safurrier/pi-sprite
 /pet align left|right
 /pet turn-status on|off|clear
 /pet live-status on|off|clear
+/pet clear-native
 ```
 
 Pets live under:
@@ -49,7 +75,27 @@ Pets live under:
 ~/.pi/agent/pi-sprite/pets/<id>/
 ```
 
-Current local expanded format:
+`turn-status` and `live-status` are both on by default. Turn status is final and replaces provisional live status when the agent turn ends. Live status waits five minutes into a long-running turn before showing a compact in-progress footer such as `🟣 running tests…`.
+
+## Native image rendering
+
+In Kitty/Ghostty-capable terminals, `pi-sprite` uses Kitty Unicode placeholders by default. Frames are uploaded quietly, while the visible sprite is rendered as placeholder text cells. That keeps tmux in charge of moving and clearing the pane grid, which avoids the ghosted native image placements caused by direct Kitty/Ghostty passthrough.
+
+For tmux, allow passthrough:
+
+```tmux
+set -g allow-passthrough on
+```
+
+To force the ANSI half-block fallback:
+
+```bash
+PI_SPRITE_NATIVE_IMAGES=0 pi
+```
+
+## Custom pets
+
+The simplest local pet has one image per state:
 
 ```text
 pet.json
@@ -76,55 +122,41 @@ Minimal `pet.json`:
 }
 ```
 
-Codex/Petdex `pet.json + spritesheet.webp` compatibility is supported. `pi-sprite` renders image-backed pets as compact terminal art, cycles multi-frame spritesheets, infers standard Petdex 8x9 atlases for `spritesheet.*`, and uses native Kitty placeholder images on Kitty/Ghostty-capable terminals with ANSI half-block fallback elsewhere.
+Import and select a local pet folder:
 
-By default, the sprite is compact, right-aligned, and label-free so it stays out of the main text flow. The pet/state label lives in Pi's footer status line instead. Use `/pet size ...`, `/pet label on`, or `/pet align left` if you want a larger or more explicit widget.
+```text
+/pet import /path/to/pet-folder
+```
 
-### Custom sprite authoring
+Codex/Petdex `pet.json + spritesheet.webp` compatibility is also supported. `pi-sprite` cycles multi-frame spritesheets and infers standard Petdex 8x9 atlases for `spritesheet.*`.
 
-This package also ships the `pi-sprite-authoring` skill for creating importable pets from AI-generated or hand-drawn sprites. Load it with:
+### Author a sprite
+
+This package ships the `pi-sprite-authoring` skill for creating importable pets from reference images, generated art, or hand-drawn sprites:
 
 ```text
 /skill:pi-sprite-authoring
 ```
 
-For a Wumpus starter template, see:
-
-```text
-examples/custom-pets/wumpus-template/
-```
-
-To create a local template folder:
+Create a starter folder:
 
 ```bash
 node skills/pi-sprite-authoring/scripts/create-pet-template.mjs --id wumpus --name Wumpus --out /tmp/wumpus-sprite
 ```
 
-Third-party reference sprites should stay local unless their licenses are verified. The helper below downloads Petdex examples into a gitignored directory with provenance notes:
+A ready-to-fill Wumpus template lives at:
+
+```text
+examples/custom-pets/wumpus-template/
+```
+
+Third-party reference sprites should stay local unless their licenses are verified. This helper downloads Petdex examples into a gitignored folder with provenance notes:
 
 ```bash
 node skills/pi-sprite-authoring/scripts/download-petdex-examples.mjs --limit 12 --out examples/petdex-downloads
 ```
 
-Turn status is on by default. After each agent turn, `pi-sprite` runs a tiny no-tools side classifier over recent session context and mirrors a compact final state in the footer, such as `🟢 PR merged` or `🟡 restart Pi to verify`. Use `/pet turn-status off` to disable it, `/pet turn-status on` to re-enable it, or `/pet turn-status clear` to clear the current footer status.
-
-Live status is also on by default. During long-running agent turns, `pi-sprite` waits five minutes, then runs a tiny no-tools side classifier for a provisional in-progress footer such as `🟣 running tests…` or `🟣 debugging renderer…`. It never claims completion; the final turn status replaces it when the agent turn ends. Use `/pet live-status off` to disable it, `/pet live-status on` to re-enable it, or `/pet live-status clear` to clear the current live footer status.
-
-Ghostty exposes the Kitty image protocol, so `pi-sprite` renders native images automatically in Kitty/Ghostty-capable terminals, including inside tmux. It uses Kitty Unicode placeholders: frames are uploaded quietly, while the visible sprite is rendered as placeholder text cells that tmux can move with the pane grid. Make sure tmux allows passthrough:
-
-```tmux
-set -g allow-passthrough on
-```
-
-If old native placements from earlier versions are still stuck, run `/pet clear-native` once, then `/pet show`. That command intentionally asks the terminal to delete visible Kitty images.
-
-Force the ANSI fallback with:
-
-```bash
-export PI_SPRITE_NATIVE_IMAGES=0
-```
-
-### `/context`
+## `/context`
 
 ```text
 /context
@@ -132,23 +164,15 @@ export PI_SPRITE_NATIVE_IMAGES=0
 /sprite:context
 ```
 
-Shows a Claude-Code-style TUI overlay with:
+`/context` opens a TUI overlay with the active model, context window, token total, estimated category breakdown, and remaining free space. `/sprite:context` is the package-specific alias for setups that already have another `/context` command.
 
-- context grid/cells
-- active model and context window
-- token total and percent
-- estimated category breakdown
-- free-space row
-
-`/sprite:context` is the same visualizer under a package-specific alias, useful when another Pi command named `/context` is present.
-
-### `/recap`
+## `/recap`
 
 ```text
 /recap
 ```
 
-Generates a short executive-summary recap in a higher-contrast speech bubble anchored near the sprite. Recap generation first uses an isolated, no-tools Pi side session with the current model, so it does not add normal user/assistant messages to the main thread. Direct API-key completion is kept only as a compatibility fallback. Use ↑/↓, j/k, space/d, or u to scroll longer recaps:
+`/recap` generates a short executive-summary recap near the sprite:
 
 ```text
 TL;DR: ...
@@ -157,7 +181,9 @@ Current status: ...
 Next: ...
 ```
 
-### `/btw`
+Recap generation first uses an isolated, no-tools Pi side session with the current model, so it does not add messages to the main thread. Direct API-key completion is only a fallback. Use arrow keys, `j/k`, `space/d`, or `u` to scroll longer recaps.
+
+## `/btw`
 
 ```text
 /btw <message>
@@ -169,24 +195,27 @@ Next: ...
 /btw:summarize
 ```
 
-BTW is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups; `/btw` reopens the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread. Answers appear in an interactive speech bubble that points toward the sprite without advertising BTW state in the Pi footer. Use ↑/↓ and page keys to scroll longer answers. It injects content back only when you explicitly run `/btw:inject` or `/btw:summarize`.
+`/btw` is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups and `/btw` to reopen the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread.
 
-## Non-features
-
-`pi-sprite` deliberately does not include:
-
-- Electron or native floating windows
-- voice, TTS, sounds, songs, or ambient weather
-- hunger, feeding, bonding, XP, accessories, treats, or pet economy
-- autonomous pet commentary or personality
-- 3D/raymarched rendering
-- large always-visible dashboards
+Answers appear in an interactive speech bubble that points toward the sprite. Nothing is injected back into the main conversation unless you explicitly run `/btw:inject` or `/btw:summarize`.
 
 ## Development
 
+Install dependencies:
+
 ```bash
 mise run setup
+```
+
+Run the usual local gate:
+
+```bash
 mise run check
+```
+
+Run the full verification path, including e2e smoke helpers:
+
+```bash
 mise run verify
 ```
 
@@ -195,6 +224,11 @@ Equivalent npm commands:
 ```bash
 npm run check
 npm run test:e2e
+```
+
+Optional e2e variants:
+
+```bash
 PI_SPRITE_E2E_TUI=1 npm run test:e2e
 PI_SPRITE_E2E_MODEL=1 npm run test:e2e
 node tests/e2e/package-smoke.mjs --isolated
@@ -206,6 +240,17 @@ TUI smoke artifacts are written under:
 ```text
 artifacts/e2e/
 ```
+
+## Non-features
+
+`pi-sprite` deliberately does not include:
+
+- Electron or native floating windows
+- voice, TTS, sounds, songs, or ambient weather
+- hunger, feeding, bonding, XP, accessories, treats, or pet economy
+- autonomous pet commentary or personality
+- 3D/raymarched rendering
+- large always-visible dashboards
 
 ## Attribution
 
