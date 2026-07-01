@@ -20,7 +20,7 @@ async function withSpriteHome<T>(fn: (home: string) => Promise<T> | T): Promise<
 	}
 }
 
-function fakeContext(statuses: string[] = []) {
+function fakeContext(statuses: string[] = [], widgets: unknown[] = []) {
 	return {
 		// biome-ignore lint/style/useNamingConvention: Pi extension contexts expose this as hasUI.
 		hasUI: true,
@@ -28,11 +28,20 @@ function fakeContext(statuses: string[] = []) {
 			setStatus(_key: string, value: string | undefined) {
 				if (value) statuses.push(value);
 			},
-			setWidget() {},
+			setWidget(_key: string, widget: unknown) {
+				widgets.push(widget);
+			},
 			notify(message: string) {
 				statuses.push(message);
 			},
 		},
+	} as never;
+}
+
+function fakeHeadlessContext() {
+	return {
+		// biome-ignore lint/style/useNamingConvention: Pi extension contexts expose this as hasUI.
+		hasUI: false,
 	} as never;
 }
 
@@ -55,6 +64,106 @@ test("uses one stable native image id per tmux pane across cwd changes", () => {
 	} finally {
 		if (previousPane === undefined) delete process.env.TMUX_PANE;
 		else process.env.TMUX_PANE = previousPane;
+	}
+});
+
+test("starting with a new context clears the previous sprite widget", async () => {
+	const previousNative = process.env.PI_SPRITE_NATIVE_IMAGES;
+	try {
+		process.env.PI_SPRITE_NATIVE_IMAGES = "0";
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+		await withSpriteHome(async () => {
+			const firstWidgets: unknown[] = [];
+			const secondWidgets: unknown[] = [];
+			const runtime = createSpriteRuntime();
+
+			await runtime.start(fakeContext([], firstWidgets));
+			const firstRenderCount = firstWidgets.length;
+			assert.ok(firstRenderCount > 0);
+			await runtime.start(fakeContext([], secondWidgets));
+			await new Promise((resolve) => setTimeout(resolve, 60));
+
+			assert.ok(firstWidgets.length > firstRenderCount);
+			assert.equal(firstWidgets.at(-1), undefined);
+			assert.ok(secondWidgets.length > 0);
+		});
+	} finally {
+		if (previousNative === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousNative;
+	}
+});
+
+test("context handoff clears pending state reset timers", async () => {
+	await withSpriteHome(async () => {
+		const statuses: string[] = [];
+		const runtime = createSpriteRuntime();
+
+		await runtime.start(fakeContext());
+		runtime.setState("success", { resetMs: 1 });
+		await runtime.start(fakeContext(statuses));
+		runtime.setState("working");
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		assert.match(statuses.at(-1) ?? "", /working/u);
+		assert.doesNotMatch(statuses.at(-1) ?? "", /idle/u);
+	});
+});
+
+test("context handoff clears headless pending state reset timers", async () => {
+	await withSpriteHome(async () => {
+		const statuses: string[] = [];
+		const runtime = createSpriteRuntime();
+
+		await runtime.start(fakeHeadlessContext());
+		runtime.setState("success", { resetMs: 1 });
+		await runtime.start(fakeContext(statuses));
+		runtime.setState("working");
+		await new Promise((resolve) => setTimeout(resolve, 10));
+
+		assert.match(statuses.at(-1) ?? "", /working/u);
+		assert.doesNotMatch(statuses.at(-1) ?? "", /idle/u);
+	});
+});
+
+test("startup native cleanup uses the current cwd image ids", async () => {
+	const previousHome = process.env.PI_SPRITE_HOME;
+	const previousNative = process.env.PI_SPRITE_NATIVE_IMAGES;
+	const previousTmuxPane = process.env.TMUX_PANE;
+	const previousCwd = process.cwd();
+	const home = mkdtempSync(join(tmpdir(), "pi-sprite-runtime-"));
+	const firstCwd = join(home, "first");
+	const secondCwd = join(home, "second");
+	mkdirSync(firstCwd, { recursive: true });
+	mkdirSync(secondCwd, { recursive: true });
+	try {
+		process.env.PI_SPRITE_HOME = home;
+		process.env.PI_SPRITE_NATIVE_IMAGES = "kitty";
+		delete process.env.TMUX_PANE;
+		setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+
+		process.chdir(firstCwd);
+		const oldId = stableNativeImageId();
+		const runtime = createSpriteRuntime();
+		process.chdir(secondCwd);
+		const currentId = stableNativeImageId();
+		assert.notEqual(currentId, oldId);
+
+		const widgets: unknown[] = [];
+		await runtime.start(fakeContext([], widgets));
+		const rendered = widgets.flatMap((widget) => (Array.isArray(widget) ? widget : [])).join("\n");
+
+		assert.match(rendered, new RegExp(`i=${currentId}(?:,|;)`, "u"));
+		assert.match(rendered, new RegExp(`i=${oldId}(?:,|;)`, "u"));
+	} finally {
+		process.chdir(previousCwd);
+		if (previousHome === undefined) delete process.env.PI_SPRITE_HOME;
+		else process.env.PI_SPRITE_HOME = previousHome;
+		if (previousNative === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousNative;
+		if (previousTmuxPane === undefined) delete process.env.TMUX_PANE;
+		else process.env.TMUX_PANE = previousTmuxPane;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+		rmSync(home, { recursive: true, force: true });
 	}
 });
 
