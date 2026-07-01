@@ -141,13 +141,7 @@ This package ships the `pi-sprite-authoring` skill for creating importable pets 
 Create a starter folder:
 
 ```bash
-node skills/pi-sprite-authoring/scripts/create-pet-template.mjs --id wumpus --name Wumpus --out /tmp/wumpus-sprite
-```
-
-A ready-to-fill Wumpus template lives at:
-
-```text
-examples/custom-pets/wumpus-template/
+node skills/pi-sprite-authoring/scripts/create-pet-template.mjs --id desk-cat --name "Desk Cat" --out /tmp/desk-cat-sprite
 ```
 
 Third-party reference sprites should stay local unless their licenses are verified. This helper downloads Petdex examples into a gitignored folder with provenance notes:
