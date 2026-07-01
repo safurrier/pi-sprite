@@ -112,7 +112,20 @@ export function createSpriteRuntime() {
 	let frameIndex = 0;
 	let previousNativeFrameImageId: number | undefined;
 	let clearedStaleNativeImages = false;
-	const nativeImageIds = nativeSpriteCleanupImageIds();
+	let trackedNativeImageIds = nativeSpriteCleanupImageIds();
+
+	function currentNativeImageIds(): number[] {
+		const ids = nativeSpriteCleanupImageIds();
+		trackedNativeImageIds = Array.from(new Set([...trackedNativeImageIds, ...ids]));
+		return ids;
+	}
+
+	function clearTrackedNativeSpriteImages(): string[] {
+		const currentIds = nativeSpriteCleanupImageIds();
+		const ids = Array.from(new Set([...trackedNativeImageIds, ...currentIds]));
+		trackedNativeImageIds = currentIds;
+		return clearNativeSpriteImages(ids);
+	}
 
 	function selectedName(): string {
 		return selectedPetId ? (loadPet(selectedPetId)?.manifest.name ?? selectedPetId) : "default";
@@ -161,19 +174,25 @@ export function createSpriteRuntime() {
 		animationTimer = undefined;
 	}
 
-	function clearNativeWidget(currentCtx: ExtensionContext, options: { removeAfter?: boolean } = {}): void {
+	function clearNativeWidget(
+		currentCtx: ExtensionContext,
+		options: { removeAfter?: boolean; requireCurrentContext?: boolean; trackTimer?: boolean } = {},
+	): void {
 		if (clearWidgetTimer) clearTimeout(clearWidgetTimer);
 		previousNativeFrameImageId = undefined;
-		const clearLines = clearNativeSpriteImages(nativeImageIds);
+		const clearLines = clearTrackedNativeSpriteImages();
 		if (!clearLines.length) {
 			currentCtx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
 			return;
 		}
 		currentCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
 		if (options.removeAfter === false) return;
-		clearWidgetTimer = setTimeout(() => {
-			if (ctx === currentCtx) currentCtx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
+		const timer = setTimeout(() => {
+			if (options.requireCurrentContext === false || ctx === currentCtx) {
+				currentCtx.ui.setWidget("pi-sprite", undefined, { placement: "belowEditor" });
+			}
 		}, 50);
+		if (options.trackTimer !== false) clearWidgetTimer = timer;
 	}
 
 	function render(): void {
@@ -184,7 +203,7 @@ export function createSpriteRuntime() {
 		if (!clearedStaleNativeImages) {
 			clearedStaleNativeImages = true;
 			previousNativeFrameImageId = undefined;
-			startupClearLines = clearNativeSpriteImages(nativeImageIds);
+			startupClearLines = clearTrackedNativeSpriteImages();
 		}
 		const withStartupClear = (lines: string[]): string[] =>
 			startupClearLines.length ? [...startupClearLines, ...lines] : lines;
@@ -227,11 +246,12 @@ export function createSpriteRuntime() {
 			frameIndex = 0;
 			const applyFrame = () => {
 				const frame = animation.frames[frameIndex % animation.frames.length]!;
+				const activeNativeImageIds = currentNativeImageIds();
 				const frameSignature = `${animation.signature}:${frameIndex % animation.frames.length}:${supportsNativeSpriteImages() ? "native" : "ansi"}:${size}:${label}:${align}`;
 				if (frameSignature === lastSignature) return;
 				lastSignature = frameSignature;
 				if (frame.native && supportsNativeSpriteImages()) {
-					const frameImageId = nativeImageIds[frameIndex % nativeImageIds.length]!;
+					const frameImageId = activeNativeImageIds[frameIndex % activeNativeImageIds.length]!;
 					const previousImageId = previousNativeFrameImageId;
 					previousNativeFrameImageId = frameImageId;
 					currentCtx.ui.setWidget(
@@ -305,7 +325,18 @@ export function createSpriteRuntime() {
 
 	return {
 		async start(nextCtx: ExtensionContext) {
+			if (ctx && ctx !== nextCtx) {
+				if (resetTimer) clearTimeout(resetTimer);
+				resetTimer = undefined;
+				stopAnimation();
+				if (ctx.hasUI) {
+					ctx.ui.setStatus("pi-sprite", undefined);
+					clearNativeWidget(ctx, { requireCurrentContext: false, trackTimer: false });
+				}
+				lastSignature = "";
+			}
 			ctx = nextCtx;
+			clearedStaleNativeImages = false;
 			const saved = loadSaved();
 			selectedPetId = saved.selectedPetId ?? selectedPetId;
 			visible = saved.visible ?? true;
