@@ -3,10 +3,18 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { setCapabilities } from "@earendil-works/pi-tui";
+import { setCapabilities, visibleWidth } from "@earendil-works/pi-tui";
 import sharp from "sharp";
+import {
+	encodeKittyPlaceholderUpload,
+	encodeKittyVirtualPlacement,
+	placeholderCell,
+	placeholderGlyph,
+	placeholderGridLines,
+} from "../src/sprite/kitty-placeholder.ts";
 import type { InstalledPet } from "../src/sprite/loader.ts";
 import {
+	buildKittyPlaceholderSpriteWidget,
 	buildNativeSpriteWidget,
 	buildTextSpriteWidget,
 	clearAllNativeSpriteImages,
@@ -15,6 +23,8 @@ import {
 	formatNativeSpritePlaceholderLines,
 	renderSpriteAnimation,
 	renderSpriteFrame,
+	setSpriteTerminalGraphicsSinkForTests,
+	spriteNativeImageMode,
 	supportsNativeSpriteImages,
 } from "../src/sprite/renderer.ts";
 
@@ -56,6 +66,64 @@ test("renders image pets as terminal half-block frames", async () => {
 test("right-aligns text sprite widgets", () => {
 	const lines = buildTextSpriteWidget(["pet"], { align: "right" }).render(10);
 	assert.equal(lines[0], "      pet");
+});
+
+test("encodes Kitty Unicode placeholder protocol without putting uploads in widget lines", () => {
+	const frame = { base64: Buffer.from("fake-png").toString("base64"), filename: "x.png", width: 4, height: 4 };
+	const upload = encodeKittyPlaceholderUpload(frame, 42);
+	const placement = encodeKittyVirtualPlacement(42, 42, 2, 2);
+	const cell = placeholderCell(0, 1, 42);
+	const lines = placeholderGridLines(2, 2, 42);
+
+	assert.match(upload, /a=t/u);
+	assert.match(upload, /q=2/u);
+	assert.match(upload, /i=42/u);
+	assert.doesNotMatch(upload, /U=1/u);
+	const chunkedUpload = encodeKittyPlaceholderUpload({ ...frame, base64: "a".repeat(9000) }, 42);
+	assert.match(chunkedUpload, /m=1/u);
+	assert.match(chunkedUpload, /m=0/u);
+	assert.match(placement, /a=p/u);
+	assert.match(placement, /U=1/u);
+	assert.match(placement, /p=42/u);
+	assert.match(placement, /c=2/u);
+	assert.match(placement, /r=2/u);
+	assert.ok(cell.includes(placeholderGlyph()));
+	assert.equal(visibleWidth(cell), 1);
+	assert.equal(lines.length, 2);
+	assert.ok(lines.every((line) => line.includes(placeholderGlyph())));
+	assert.ok(lines.every((line) => !line.includes("\u001b_G")));
+});
+
+test("Kitty placeholder widget writes uploads out of band and animates by swapping placeholder ids", () => {
+	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
+	const writes: string[] = [];
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+	setSpriteTerminalGraphicsSinkForTests({ write: (sequence) => writes.push(sequence) });
+	try {
+		process.env.PI_SPRITE_NATIVE_IMAGES = "placeholder";
+		assert.equal(spriteNativeImageMode(), "placeholder");
+		assert.equal(supportsNativeSpriteImages(), true);
+		const frames = [
+			{ base64: Buffer.from("frame-0").toString("base64"), filename: "0.png", width: 4, height: 4 },
+			{ base64: Buffer.from("frame-1").toString("base64"), filename: "1.png", width: 4, height: 4 },
+		];
+		const first = buildKittyPlaceholderSpriteWidget(frames, 0, "status", [42, 43], { size: "tiny" }).render(20);
+		const second = buildKittyPlaceholderSpriteWidget(frames, 1, "status", [42, 43], { size: "tiny" }).render(20);
+		const rendered = [...first, ...second].join("\n");
+
+		assert.equal(writes.filter((write) => write.includes("a=t")).length, 3);
+		assert.equal(writes.filter((write) => write.includes("i=43")).length, 3);
+		assert.equal(writes.filter((write) => write.includes("U=1")).length, 2);
+		assert.ok(first.join("\n").includes(placeholderGlyph()));
+		assert.ok(second.join("\n").includes(placeholderGlyph()));
+		assert.notEqual(first.join("\n"), second.join("\n"));
+		assert.equal(rendered.includes("\u001b_G"), false);
+	} finally {
+		setSpriteTerminalGraphicsSinkForTests(undefined);
+		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	}
 });
 
 test("detects native sprite image capability and builds a native widget", () => {
@@ -109,7 +177,7 @@ test("auto-enables native sprite images inside known Kitty-capable tmux terminal
 	}
 });
 
-test("allows explicit native sprite image opt-in inside tmux", () => {
+test("native Kitty widget wraps control sequences inside tmux", () => {
 	const previousTmux = process.env.TMUX;
 	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
 	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
@@ -174,6 +242,44 @@ test("native sprite widget deletes the previous frame after drawing the next fra
 test("native placeholder reserves label row", () => {
 	assert.equal(formatNativeSpritePlaceholderLines([], { size: "small" }).length, 4);
 	assert.equal(formatNativeSpritePlaceholderLines([], { size: "small", label: true }).length, 5);
+});
+
+test("placeholder image mode is the default when Kitty control is available", () => {
+	const previousOverride = process.env.PI_SPRITE_NATIVE_IMAGES;
+	const previousGhostty = process.env.GHOSTTY_RESOURCES_DIR;
+	const previousKitty = process.env.KITTY_WINDOW_ID;
+	const previousTermProgram = process.env.TERM_PROGRAM;
+	const previousTerminalEmulator = process.env.TERMINAL_EMULATOR;
+	setCapabilities({ images: "kitty", trueColor: true, hyperlinks: true });
+	try {
+		delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		assert.equal(spriteNativeImageMode(), "placeholder");
+		process.env.PI_SPRITE_NATIVE_IMAGES = "1";
+		assert.equal(spriteNativeImageMode(), "placeholder");
+		process.env.PI_SPRITE_NATIVE_IMAGES = "placeholder";
+		assert.equal(spriteNativeImageMode(), "placeholder");
+		process.env.PI_SPRITE_NATIVE_IMAGES = "0";
+		assert.equal(spriteNativeImageMode(), "ansi");
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+		delete process.env.GHOSTTY_RESOURCES_DIR;
+		delete process.env.KITTY_WINDOW_ID;
+		delete process.env.TERM_PROGRAM;
+		delete process.env.TERMINAL_EMULATOR;
+		delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		assert.equal(spriteNativeImageMode(), "ansi");
+	} finally {
+		if (previousOverride === undefined) delete process.env.PI_SPRITE_NATIVE_IMAGES;
+		else process.env.PI_SPRITE_NATIVE_IMAGES = previousOverride;
+		if (previousGhostty === undefined) delete process.env.GHOSTTY_RESOURCES_DIR;
+		else process.env.GHOSTTY_RESOURCES_DIR = previousGhostty;
+		if (previousKitty === undefined) delete process.env.KITTY_WINDOW_ID;
+		else process.env.KITTY_WINDOW_ID = previousKitty;
+		if (previousTermProgram === undefined) delete process.env.TERM_PROGRAM;
+		else process.env.TERM_PROGRAM = previousTermProgram;
+		if (previousTerminalEmulator === undefined) delete process.env.TERMINAL_EMULATOR;
+		else process.env.TERMINAL_EMULATOR = previousTerminalEmulator;
+		setCapabilities({ images: null, trueColor: true, hyperlinks: true });
+	}
 });
 
 test("native sprite images can be disabled explicitly without blocking cleanup", () => {

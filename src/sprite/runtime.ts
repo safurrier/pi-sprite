@@ -9,9 +9,11 @@ import type { SpriteState } from "./manifest.ts";
 import { spriteHome, statePath } from "./paths.ts";
 import { installPetdexPet, listPetdexPets } from "./petdex.ts";
 import {
+	buildKittyPlaceholderSpriteWidget,
 	buildNativeSpriteWidget,
 	clearAllNativeSpriteImages,
 	clearNativeSpriteImages,
+	clearSpriteTerminalGraphicsCaches,
 	formatNativeSpritePlaceholderLines,
 	formatTextSpriteLines,
 	renderSpriteAnimation,
@@ -19,6 +21,7 @@ import {
 	type SpriteRenderOptions,
 	type SpriteSize,
 	supportsNativeSpriteImages,
+	usesKittyPlaceholderSpriteImages,
 } from "./renderer.ts";
 import { formatTurnStatusFooter, type TurnStatus } from "./turn-status-format.ts";
 
@@ -83,9 +86,10 @@ function legacyNativeImageId(): number {
 	return nativeImageIdFromSeed(legacySeed, 0x7fffffff);
 }
 
-export function nativeSpriteCleanupImageIds(): number[] {
+export function nativeSpriteCleanupImageIds(count = 16): number[] {
 	const imageId = stableNativeImageId();
-	return Array.from(new Set([imageId, imageId + 1, legacyNativeImageId()]));
+	const frameIds = Array.from({ length: Math.max(2, count) }, (_unused, index) => imageId + index);
+	return Array.from(new Set([...frameIds, legacyNativeImageId()]));
 }
 
 export function createSpriteRuntime() {
@@ -114,8 +118,8 @@ export function createSpriteRuntime() {
 	let clearedStaleNativeImages = false;
 	let trackedNativeImageIds = nativeSpriteCleanupImageIds();
 
-	function currentNativeImageIds(): number[] {
-		const ids = nativeSpriteCleanupImageIds();
+	function currentNativeImageIds(count = 2): number[] {
+		const ids = nativeSpriteCleanupImageIds(count);
 		trackedNativeImageIds = Array.from(new Set([...trackedNativeImageIds, ...ids]));
 		return ids;
 	}
@@ -124,6 +128,7 @@ export function createSpriteRuntime() {
 		const currentIds = nativeSpriteCleanupImageIds();
 		const ids = Array.from(new Set([...trackedNativeImageIds, ...currentIds]));
 		trackedNativeImageIds = currentIds;
+		clearSpriteTerminalGraphicsCaches();
 		return clearNativeSpriteImages(ids);
 	}
 
@@ -246,11 +251,32 @@ export function createSpriteRuntime() {
 			frameIndex = 0;
 			const applyFrame = () => {
 				const frame = animation.frames[frameIndex % animation.frames.length]!;
-				const activeNativeImageIds = currentNativeImageIds();
-				const frameSignature = `${animation.signature}:${frameIndex % animation.frames.length}:${supportsNativeSpriteImages() ? "native" : "ansi"}:${size}:${label}:${align}`;
+				const nativeFrames = animation.frames.map((candidate) => candidate.native);
+				const hasNativeFrames = nativeFrames.every(Boolean);
+				const activeNativeImageIds = currentNativeImageIds(animation.frames.length);
+				const nativeMode = usesKittyPlaceholderSpriteImages()
+					? "placeholder"
+					: supportsNativeSpriteImages()
+						? "native"
+						: "ansi";
+				const frameSignature = `${animation.signature}:${frameIndex % animation.frames.length}:${nativeMode}:${size}:${label}:${align}`;
 				if (frameSignature === lastSignature) return;
 				lastSignature = frameSignature;
-				if (frame.native && supportsNativeSpriteImages()) {
+				if (hasNativeFrames && usesKittyPlaceholderSpriteImages()) {
+					previousNativeFrameImageId = undefined;
+					currentCtx.ui.setWidget(
+						"pi-sprite",
+						() =>
+							buildKittyPlaceholderSpriteWidget(
+								nativeFrames as NonNullable<(typeof nativeFrames)[number]>[],
+								frameIndex % animation.frames.length,
+								`pi-sprite · ${state} · ${pet.manifest.name}`,
+								activeNativeImageIds,
+								renderOptions(),
+							),
+						{ placement: "belowEditor" },
+					);
+				} else if (frame.native && supportsNativeSpriteImages()) {
 					const frameImageId = activeNativeImageIds[frameIndex % activeNativeImageIds.length]!;
 					const previousImageId = previousNativeFrameImageId;
 					previousNativeFrameImageId = frameImageId;
@@ -589,7 +615,9 @@ export function createSpriteRuntime() {
 							break;
 						}
 						case "clear-native": {
-							const clearLines = clearAllNativeSpriteImages();
+							stopAnimation();
+							renderGeneration++;
+							const clearLines = [...clearTrackedNativeSpriteImages(), ...clearAllNativeSpriteImages()];
 							if (clearLines.length) commandCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
 							lastSignature = "";
 							commandCtx.ui.notify("Requested native terminal image cleanup. /pet show redraws the sprite.", "info");
