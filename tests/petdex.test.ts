@@ -39,6 +39,17 @@ function withHome<T>(fn: () => Promise<T>): Promise<T> {
 	});
 }
 
+async function withManifestUrl(url: string, fn: () => Promise<void>) {
+	const oldUrl = process.env.PI_SPRITE_PETDEX_MANIFEST_URL;
+	process.env.PI_SPRITE_PETDEX_MANIFEST_URL = url;
+	try {
+		await fn();
+	} finally {
+		if (oldUrl === undefined) delete process.env.PI_SPRITE_PETDEX_MANIFEST_URL;
+		else process.env.PI_SPRITE_PETDEX_MANIFEST_URL = oldUrl;
+	}
+}
+
 test("Petdex exact lookup searches the full manifest, not just first gallery page", async () => {
 	await withFetch(manifest(35), async () => {
 		const listed = await listPetdexPets();
@@ -64,5 +75,27 @@ test("Petdex install rejects non-https manifest asset URLs", async () => {
 				await assert.rejects(() => installPetdexPet("unsafe-pet"), /https URL/u);
 			},
 		);
+	});
+});
+
+test("Petdex localhost asset exception requires a localhost manifest URL", async () => {
+	await withHome(async () => {
+		await withManifestUrl("https://example.test/manifest", async () => {
+			await withFetch(
+				{
+					pets: [
+						{
+							slug: "local-asset-pet",
+							displayName: "Local Asset Pet",
+							petJsonUrl: "http://127.0.0.1:3000/pet.json",
+							spritesheetUrl: "https://example.test/spritesheet.webp",
+						},
+					],
+				},
+				async () => {
+					await assert.rejects(() => installPetdexPet("local-asset-pet"), /https URL/u);
+				},
+			);
+		});
 	});
 });

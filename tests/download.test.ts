@@ -19,6 +19,7 @@ test("pet downloads require https unless localhost is explicitly allowed", () =>
 		parseSafeDownloadUrl("http://127.0.0.1:3000/pet.zip", { allowLocalhostHttp: true }).hostname,
 		"127.0.0.1",
 	);
+	assert.equal(parseSafeDownloadUrl("http://[::1]:3000/pet.zip", { allowLocalhostHttp: true }).hostname, "[::1]");
 });
 
 test("download rejects oversized content-length before accepting body", async () => {

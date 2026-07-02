@@ -37,8 +37,13 @@ function clean(value: unknown): string {
 	return typeof value === "string" ? value.trim() : "";
 }
 
+function allowLocalhostHttpAssets(): boolean {
+	const manifestUrl = parseSafeDownloadUrl(petdexManifestUrl(), { allowLocalhostHttp: true });
+	return manifestUrl.protocol === "http:";
+}
+
 async function download(url: string): Promise<Buffer> {
-	return await downloadToBuffer(url, { allowLocalhostHttp: Boolean(process.env.PI_SPRITE_PETDEX_MANIFEST_URL) });
+	return await downloadToBuffer(url, { allowLocalhostHttp: allowLocalhostHttpAssets() });
 }
 
 async function manifestPets(): Promise<PetdexManifestPet[]> {
@@ -98,8 +103,9 @@ function spriteNameFromUrl(url: string): string {
 export async function installPetdexPet(slug: string): Promise<InstalledPet> {
 	const pet = await getPetdexPet(slug);
 	if (!pet) throw new Error(`Petdex pet not found: ${slug}`);
-	parseSafeDownloadUrl(pet.petJsonUrl, { allowLocalhostHttp: Boolean(process.env.PI_SPRITE_PETDEX_MANIFEST_URL) });
-	parseSafeDownloadUrl(pet.spritesheetUrl, { allowLocalhostHttp: Boolean(process.env.PI_SPRITE_PETDEX_MANIFEST_URL) });
+	const allowLocalhostHttp = allowLocalhostHttpAssets();
+	parseSafeDownloadUrl(pet.petJsonUrl, { allowLocalhostHttp });
+	parseSafeDownloadUrl(pet.spritesheetUrl, { allowLocalhostHttp });
 	const tmp = join(petsDir(), `.petdex-${pet.id}-${Date.now()}`);
 	rmSync(tmp, { recursive: true, force: true });
 	mkdirSync(tmp, { recursive: true });

@@ -8,7 +8,8 @@ export interface DownloadOptions {
 }
 
 function isLocalhost(hostname: string): boolean {
-	return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+	const normalized = hostname.replace(/^\[(.*)\]$/u, "$1");
+	return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
 
 export function parseSafeDownloadUrl(urlText: string, options: DownloadOptions = {}): URL {
