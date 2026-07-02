@@ -41,7 +41,10 @@ async function readResponseBody(response: Response, maxBytes: number): Promise<B
 			if (done) break;
 			const chunk = Buffer.from(value);
 			total += chunk.length;
-			if (total > maxBytes) throw new Error("download is too large");
+			if (total > maxBytes) {
+				await reader.cancel("download is too large");
+				throw new Error("download is too large");
+			}
 			chunks.push(chunk);
 		}
 	} finally {

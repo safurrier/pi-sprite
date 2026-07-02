@@ -43,6 +43,28 @@ test("download rejects oversized streamed bodies", async () => {
 	});
 });
 
+test("download cancels oversized streamed bodies", async () => {
+	let canceled = false;
+	let pulls = 0;
+	const stream = new ReadableStream({
+		pull(controller) {
+			pulls++;
+			controller.enqueue(new Uint8Array([1, 2]));
+		},
+		cancel() {
+			canceled = true;
+		},
+	});
+	await withFetch((async () => new Response(stream)) as typeof fetch, async () => {
+		await assert.rejects(
+			() => downloadToBuffer("https://example.com/pet.zip", { maxBytes: 3 }),
+			/download is too large/u,
+		);
+	});
+	assert.equal(canceled, true);
+	assert.ok(pulls >= 2);
+});
+
 test("download revalidates the final response URL after redirects", async () => {
 	await withFetch(
 		(async () => {
