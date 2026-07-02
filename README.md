@@ -122,6 +122,21 @@ Minimal `pet.json`:
 }
 ```
 
+Optional `personality` text gives the selected pet a bounded voice in explicit `/btw` side conversations:
+
+```json
+{
+	"id": "boba",
+	"name": "Boba",
+	"personality": "Warm, concise, lightly mischievous, and practical. Keep answers short.",
+	"sprites": {
+		"idle": "idle.png"
+	}
+}
+```
+
+The personality is not injected into normal main-agent turns. It only guides `/btw` and `/btw:ask` answers.
+
 Import and select a local pet folder:
 
 ```text
@@ -242,7 +257,7 @@ artifacts/e2e/
 - Electron or native floating windows
 - voice, TTS, sounds, songs, or ambient weather
 - hunger, feeding, bonding, XP, accessories, treats, or pet economy
-- autonomous pet commentary or personality
+- autonomous pet commentary or main-thread personality injection
 - 3D/raymarched rendering
 - large always-visible dashboards
 

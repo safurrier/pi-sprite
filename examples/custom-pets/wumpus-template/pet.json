@@ -3,6 +3,7 @@
 	"name": "Wumpus",
 	"author": "Alex",
 	"description": "A tiny Wumpus companion for pi-sprite.",
+	"personality": "Warm, concise, lightly mischievous, and practical. Keep BTW answers short.",
 	"sprites": {
 		"idle": "idle.png",
 		"thinking": "thinking.png",

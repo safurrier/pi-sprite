@@ -136,6 +136,10 @@ export function createSpriteRuntime() {
 		return selectedPetId ? (loadPet(selectedPetId)?.manifest.name ?? selectedPetId) : "default";
 	}
 
+	function selectedPersonality(): string | undefined {
+		return selectedPetId ? loadPet(selectedPetId)?.manifest.personality : undefined;
+	}
+
 	function renderOptions(): SpriteRenderOptions {
 		return { size, label, align };
 	}
@@ -439,6 +443,9 @@ export function createSpriteRuntime() {
 		},
 		getSpriteName() {
 			return selectedName();
+		},
+		getSpritePersonality() {
+			return selectedPersonality();
 		},
 		shutdown() {
 			if (resetTimer) clearTimeout(resetTimer);

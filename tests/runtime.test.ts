@@ -240,6 +240,29 @@ test("btw and recap activity do not advertise in the Pi footer", async () => {
 	});
 });
 
+test("selected pet exposes personality for BTW prompts", async () => {
+	await withSpriteHome(async (home) => {
+		const petDir = join(home, "pets", "personality-pet");
+		mkdirSync(petDir, { recursive: true });
+		writeFileSync(
+			join(petDir, "pet.json"),
+			JSON.stringify({
+				id: "personality-pet",
+				name: "Personality Pet",
+				personality: "Warm, concise, and practical.",
+				sprites: { idle: "idle.png" },
+			}),
+		);
+		writeFileSync(join(home, "state.json"), JSON.stringify({ selectedPetId: "personality-pet", visible: true }));
+
+		const runtime = createSpriteRuntime();
+		await runtime.start(fakeContext());
+
+		assert.equal(runtime.getSpriteName(), "Personality Pet");
+		assert.equal(runtime.getSpritePersonality(), "Warm, concise, and practical.");
+	});
+});
+
 test("final turn status clears provisional live status", async () => {
 	await withSpriteHome(async () => {
 		const statuses: string[] = [];

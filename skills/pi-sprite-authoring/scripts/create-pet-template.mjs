@@ -19,6 +19,7 @@ function normalizeId(value) {
 const id = normalizeId(arg("id", "wumpus"));
 const name = arg("name", "Wumpus").trim() || id;
 const author = arg("author", "").trim();
+const personality = arg("personality", "").trim();
 const out = arg("out", `./${id}-sprite`);
 
 if (!id) {
@@ -32,6 +33,7 @@ const manifest = {
 	name,
 	...(author ? { author } : {}),
 	description: `A tiny ${name} companion for pi-sprite.`,
+	...(personality ? { personality } : {}),
 	sprites: {
 		idle: "idle.png",
 		thinking: "thinking.png",

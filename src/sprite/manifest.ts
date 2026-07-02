@@ -9,11 +9,13 @@ export interface PetManifest {
 	version?: string;
 	author?: string;
 	description?: string;
+	personality?: string;
 	sprites: Partial<Record<SpriteState, string>>;
 	frame?: { width?: number; height?: number };
 }
 
 const VALID_ASSET_EXTENSIONS = new Set([".png", ".webp", ".gif", ".jpg", ".jpeg"]);
+const MAX_PERSONALITY_LENGTH = 2000;
 
 export function normalizePetId(value: string): string {
 	return value
@@ -42,6 +44,16 @@ function safeRelativeAsset(path: string): string {
 	return normalized;
 }
 
+function safePersonality(value: unknown): string | undefined {
+	if (typeof value !== "string") return undefined;
+	const personality = value.trim();
+	if (!personality) return undefined;
+	if (personality.length > MAX_PERSONALITY_LENGTH) {
+		throw new Error(`pet.json personality must be ${MAX_PERSONALITY_LENGTH} characters or fewer`);
+	}
+	return personality;
+}
+
 export function parsePetManifest(raw: unknown): PetManifest {
 	const data = asRecord(raw);
 	const codexId = typeof data.id === "string" ? data.id : "";
@@ -68,6 +80,7 @@ export function parsePetManifest(raw: unknown): PetManifest {
 		version: typeof data.version === "string" ? data.version : undefined,
 		author: typeof data.author === "string" ? data.author : undefined,
 		description: typeof data.description === "string" ? data.description : undefined,
+		personality: safePersonality(data.personality),
 		sprites,
 		frame: data.frame && typeof data.frame === "object" ? (data.frame as PetManifest["frame"]) : undefined,
 	};

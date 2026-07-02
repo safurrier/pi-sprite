@@ -14,8 +14,22 @@ test("parses expanded and Codex-style manifests", () => {
 	);
 });
 
+test("parses optional short pet personality prompts", () => {
+	const manifest = parsePetManifest({
+		id: "boba",
+		name: "Boba",
+		personality: "  Warm, concise, and lightly mischievous.  ",
+		sprites: { idle: "idle.png" },
+	});
+	assert.equal(manifest.personality, "Warm, concise, and lightly mischievous.");
+});
+
 test("rejects unsafe sprite paths", () => {
 	assert.throws(() => parsePetManifest({ id: "x", sprites: { idle: "../idle.png" } }));
 	assert.throws(() => parsePetManifest({ id: "x", spritesheetPath: "/tmp/x.webp" }));
 	assert.throws(() => parsePetManifest({ id: "x", sprites: { idle: "run.sh" } }));
+});
+
+test("rejects oversized pet personality prompts", () => {
+	assert.throws(() => parsePetManifest({ id: "x", personality: "x".repeat(2001), sprites: { idle: "idle.png" } }));
 });
