@@ -25,6 +25,9 @@ test("pi-sprite authoring skill has discoverable metadata and resources", () => 
 	assert.match(skill, /references\/petdex-reference-to-custom-pet\.md/u);
 	assert.match(skill, /references\/gpt-image-sprite-workflow\.md/u);
 	assert.match(skill, /references\/character-cohesion-review\.md/u);
+	assert.match(skill, /Optional personality pass/u);
+	assert.match(skill, /Sweet, loyal, curious, and a little goofy/u);
+	assert.match(skill, /\/btw:ask/u);
 	assert.match(skill, /scripts\/openai_sprite_image\.py/u);
 	assert.match(skill, /scripts\/remove_sprite_background\.py/u);
 	assert.match(skill, /scripts\/assemble_sprite_strip\.py/u);
@@ -55,7 +58,37 @@ test("create-pet-template script writes an importable Wumpus manifest", async ()
 		const manifest = JSON.parse(readFileSync(join(out, "pet.json"), "utf8"));
 		assert.equal(manifest.id, "wumpus");
 		assert.equal(manifest.name, "Wumpus");
+		assert.equal(manifest.personality, undefined);
 		assert.equal(manifest.sprites.idle, "idle.png");
+	} finally {
+		rmSync(out, { recursive: true, force: true });
+	}
+});
+
+test("create-pet-template script includes optional personality when supplied", async () => {
+	const out = mkdtempSync(join(tmpdir(), "pi-sprite-skill-personality-"));
+	try {
+		const { spawnSync } = await import("node:child_process");
+		const result = spawnSync(
+			"node",
+			[
+				join(skillRoot, "scripts", "create-pet-template.mjs"),
+				"--id",
+				"WendyBot3000",
+				"--name",
+				"WendyBot3000",
+				"--personality",
+				"Sweet, loyal, curious, and a little goofy.",
+				"--out",
+				out,
+			],
+			{ encoding: "utf8" },
+		);
+		assert.equal(result.status, 0, result.stderr);
+		const manifest = JSON.parse(readFileSync(join(out, "pet.json"), "utf8"));
+		assert.equal(manifest.id, "wendybot3000");
+		assert.equal(manifest.name, "WendyBot3000");
+		assert.equal(manifest.personality, "Sweet, loyal, curious, and a little goofy.");
 	} finally {
 		rmSync(out, { recursive: true, force: true });
 	}
