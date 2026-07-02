@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import { downloadToBuffer, parseSafeDownloadUrl } from "./download.ts";
 import { type InstalledPet, importPetFolder, loadPet } from "./loader.ts";
 import { petsDir } from "./paths.ts";
 
@@ -37,15 +38,15 @@ function clean(value: unknown): string {
 }
 
 async function download(url: string): Promise<Buffer> {
-	const res = await fetch(url, { headers: { accept: "*/*" } });
-	if (!res.ok) throw new Error(`download failed for ${url} (${res.status})`);
-	return Buffer.from(await res.arrayBuffer());
+	return await downloadToBuffer(url, { allowLocalhostHttp: Boolean(process.env.PI_SPRITE_PETDEX_MANIFEST_URL) });
 }
 
 async function manifestPets(): Promise<PetdexManifestPet[]> {
-	const res = await fetch(petdexManifestUrl(), { headers: { accept: "application/json" } });
-	if (!res.ok) throw new Error(`Petdex manifest fetch failed (${res.status})`);
-	const raw = (await res.json()) as { pets?: unknown[] };
+	const manifest = await downloadToBuffer(petdexManifestUrl(), {
+		maxBytes: 2 * 1024 * 1024,
+		allowLocalhostHttp: Boolean(process.env.PI_SPRITE_PETDEX_MANIFEST_URL),
+	});
+	const raw = JSON.parse(manifest.toString("utf8")) as { pets?: unknown[] };
 	if (!Array.isArray(raw.pets)) throw new Error("Petdex manifest response is invalid");
 	return raw.pets
 		.filter((pet): pet is Record<string, unknown> => Boolean(pet && typeof pet === "object" && !Array.isArray(pet)))
@@ -97,6 +98,8 @@ function spriteNameFromUrl(url: string): string {
 export async function installPetdexPet(slug: string): Promise<InstalledPet> {
 	const pet = await getPetdexPet(slug);
 	if (!pet) throw new Error(`Petdex pet not found: ${slug}`);
+	parseSafeDownloadUrl(pet.petJsonUrl, { allowLocalhostHttp: Boolean(process.env.PI_SPRITE_PETDEX_MANIFEST_URL) });
+	parseSafeDownloadUrl(pet.spritesheetUrl, { allowLocalhostHttp: Boolean(process.env.PI_SPRITE_PETDEX_MANIFEST_URL) });
 	const tmp = join(petsDir(), `.petdex-${pet.id}-${Date.now()}`);
 	rmSync(tmp, { recursive: true, force: true });
 	mkdirSync(tmp, { recursive: true });

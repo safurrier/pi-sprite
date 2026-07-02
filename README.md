@@ -145,18 +145,30 @@ Import and select a local pet folder:
 
 Codex/Petdex `pet.json + spritesheet.webp` compatibility is also supported. `pi-sprite` cycles multi-frame spritesheets and infers standard Petdex 8x9 atlases for `spritesheet.*`.
 
-### Author a sprite
+### Author a sprite effectively
 
-This package ships the `pi-sprite-authoring` skill for creating importable pets from reference images, generated art, or hand-drawn sprites:
+This package ships the `pi-sprite-authoring` skill. Use it when you want an agent to turn references, generated art, or hand-drawn frames into an importable pet without losing character consistency across states:
 
 ```text
 /skill:pi-sprite-authoring
 ```
 
+The skill walks through reference gathering, a canonical idle-frame anchor, state-frame review, optional personality metadata for explicit `/btw` replies, and final import validation. It is the recommended path for making polished custom sprites instead of hand-assembling `pet.json` from scratch.
+
 Create a starter folder:
 
 ```bash
 node skills/pi-sprite-authoring/scripts/create-pet-template.mjs --id desk-cat --name "Desk Cat" --out /tmp/desk-cat-sprite
+```
+
+Add bounded BTW-only personality metadata when desired:
+
+```bash
+node skills/pi-sprite-authoring/scripts/create-pet-template.mjs \
+  --id desk-cat \
+  --name "Desk Cat" \
+  --personality "Warm, concise, lightly mischievous, and practical. Keep BTW answers short." \
+  --out /tmp/desk-cat-sprite
 ```
 
 Third-party reference sprites should stay local unless their licenses are verified. This helper downloads Petdex examples into a gitignored folder with provenance notes:

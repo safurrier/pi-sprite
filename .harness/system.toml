@@ -28,7 +28,7 @@ validation_checks = ["focused-unit-test", "unit-tests"]
 id = "sprite-runtime-rendering"
 title = "Sprite runtime and rendering"
 kind = "tui-widget-runtime"
-paths = ["src/sprite/runtime.ts", "src/sprite/renderer.ts", "src/sprite/turn-status*.ts", "src/sprite/live-status*.ts", "src/ui/overlay.ts", "tests/renderer.test.ts", "tests/runtime.test.ts", "tests/overlay.test.ts", "tests/turn-status.test.ts"]
+paths = ["src/sprite/runtime.ts", "src/sprite/commands.ts", "src/sprite/renderer.ts", "src/sprite/turn-status*.ts", "src/sprite/live-status*.ts", "src/ui/overlay.ts", "tests/renderer.test.ts", "tests/runtime.test.ts", "tests/pet-command.test.ts", "tests/overlay.test.ts", "tests/turn-status.test.ts"]
 read_before_editing = ["README.md", "docs/pi-sprite-implementation-spec.md"]
 validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate", "e2e-gate"]
 
@@ -54,8 +54,8 @@ validation_checks = ["focused-unit-test", "unit-tests", "fast-gate"]
 
 [[components.invariants]]
 id = "imports-stay-local-and-safe"
-statement = "Pet imports reject unsafe paths, unsupported archive contents, and oversized or non-HTTPS URL imports while keeping third-party Petdex downloads local unless licenses are verified."
-evidence = ["src/sprite/loader.ts", "src/sprite/petdex.ts", "tests/importer.test.ts", "tests/petdex.test.ts", "README.md"]
+statement = "Pet imports reject unsafe paths, unsupported archive contents, oversized downloads, non-HTTPS external URLs, and stalled network fetches while keeping third-party Petdex downloads local unless licenses are verified."
+evidence = ["src/sprite/loader.ts", "src/sprite/download.ts", "src/sprite/petdex.ts", "tests/importer.test.ts", "tests/download.test.ts", "tests/petdex.test.ts", "README.md"]
 validation_checks = ["focused-unit-test", "unit-tests", "package-smoke"]
 
 [[components]]
@@ -77,6 +77,26 @@ id = "recap-is-compact-executive-summary"
 statement = "Recap output stays a compact executive summary with TL;DR, Recent work, Current status, and Next sections rather than an exhaustive transcript."
 evidence = ["src/recap/format.ts", "src/recap/index.ts", "src/agent/side-session.ts", "tests/recap.test.ts", "tests/side-session.test.ts", "README.md"]
 validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
+
+[[components.invariants]]
+id = "hidden-side-work-stays-out-of-context"
+statement = "BTW thread entries, BTW reset markers, recap entries, and other hidden pi-sprite bookkeeping stay out of main model context unless explicit BTW inject/summarize commands send content to the main thread."
+evidence = ["src/agent/session-entries.ts", "src/btw/thread-store.ts", "src/btw/index.ts", "src/recap/index.ts", "tests/session-entries.test.ts", "tests/btw.test.ts", "tests/recap.test.ts"]
+validation_checks = ["focused-unit-test", "unit-tests"]
+
+[[components.invariants]]
+id = "personality-is-btw-only"
+statement = "Pet personality metadata is untrusted bounded style guidance for explicit BTW replies only; it must not affect recap, turn status, live status, lifecycle hooks, or main-agent turns."
+evidence = ["src/btw/prompt.ts", "src/sprite/manifest.ts", "tests/btw.test.ts", "tests/recap.test.ts", "tests/turn-status.test.ts", "tests/non-features.test.ts", "README.md"]
+validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
+
+[[components]]
+id = "side-session-completion-policy"
+title = "Hidden entries, side sessions, and completion fallbacks"
+kind = "pi-side-work"
+paths = ["src/agent/session-entries.ts", "src/agent/side-session.ts", "src/agent/side-completion.ts", "src/btw/thread-store.ts", "src/btw/completion.ts", "src/recap/generation.ts", "src/sprite/turn-status.ts", "src/sprite/live-status.ts", "tests/session-entries.test.ts", "tests/btw.test.ts", "tests/recap.test.ts", "tests/turn-status.test.ts"]
+read_before_editing = ["README.md"]
+validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate"]
 
 [[components]]
 id = "package-skills-examples"

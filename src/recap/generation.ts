@@ -1,4 +1,5 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { completeTextWithSideSessionFallback } from "../agent/side-completion.ts";
 import type { SideCompletionRequest, SideCompletionResult } from "../agent/side-session-types.ts";
 import { SYSTEM_PROMPT } from "./format.ts";
 
@@ -43,14 +44,15 @@ export async function generateRecapText(
 	text: string,
 	adapters: RecapCompletionAdapters,
 ): Promise<RecapGenerationResult> {
-	const sideResult = await adapters.sideSession(ctx, {
-		prompt: recapPrompt(text),
-		systemPrompt: SYSTEM_PROMPT,
-		maxTokens: 500,
-		timeoutMs: 120_000,
+	const request = { prompt: recapPrompt(text), systemPrompt: SYSTEM_PROMPT, maxTokens: 500, timeoutMs: 120_000 };
+	const result = await completeTextWithSideSessionFallback(ctx, request, {
+		sideSession: async (sideCtx, sideRequest) =>
+			await adapters.sideSession(sideCtx as ExtensionCommandContext, sideRequest),
+		direct: async (directCtx, _prompt, _maxTokens) => {
+			const directResult = await adapters.direct(directCtx as ExtensionCommandContext, text);
+			return directResult.ok ? directResult.recap : directResult;
+		},
 	});
-	if (sideResult.ok) return { ok: true, recap: sideResult.text, source: "side-session" };
-	const directResult = await adapters.direct(ctx, text);
-	if (directResult.ok) return directResult;
-	return { ok: false, message: recapFailureMessage(sideResult, directResult) };
+	if (result.ok) return { ok: true, recap: result.text, source: result.source };
+	return { ok: false, message: recapFailureMessage(result.sideResult, { ok: false, message: result.directMessage }) };
 }

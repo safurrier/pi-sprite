@@ -1,5 +1,5 @@
-import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { completeWithApiKeyText } from "../agent/side-completion.ts";
 import type { SideCompletionRequest, SideCompletionResult } from "../agent/side-session-types.ts";
 import { type LiveTurnStatus, parseLiveStatusResponse, promptForLiveStatus } from "./live-status-format.ts";
 import { recentConversationForTurnStatus } from "./turn-status-format.ts";
@@ -15,44 +15,12 @@ type LiveStatusAdapters = {
 	direct: DirectCompletionAdapter;
 };
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
-	return await new Promise<T | undefined>((resolve) => {
-		const timer = setTimeout(() => resolve(undefined), ms);
-		promise.then(
-			(value) => {
-				clearTimeout(timer);
-				resolve(value);
-			},
-			() => {
-				clearTimeout(timer);
-				resolve(undefined);
-			},
-		);
-	});
-}
-
 async function directLiveStatusCompletion(ctx: ExtensionContext, prompt: string): Promise<string | undefined> {
-	if (!ctx.model) return undefined;
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-	if (!auth.ok || !auth.apiKey) return undefined;
-	const request = async () => {
-		const { complete } = await import("@earendil-works/pi-ai");
-		const model = {
-			...ctx.model!,
-			maxTokens: Math.min(ctx.model!.maxTokens ?? LIVE_STATUS_MAX_TOKENS, LIVE_STATUS_MAX_TOKENS),
-		};
-		const response = await complete(
-			model,
-			{ messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }] as Message[] },
-			{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: LIVE_STATUS_MAX_TOKENS },
-		);
-		return response.content
-			.filter((part): part is { type: "text"; text: string } => part.type === "text")
-			.map((part) => part.text)
-			.join("\n")
-			.trim();
-	};
-	return await withTimeout(request(), LIVE_STATUS_TIMEOUT_MS);
+	const result = await completeWithApiKeyText(ctx, prompt, {
+		maxTokens: LIVE_STATUS_MAX_TOKENS,
+		timeoutMs: LIVE_STATUS_TIMEOUT_MS,
+	});
+	return result.ok ? result.text : undefined;
 }
 
 const defaultAdapters: LiveStatusAdapters = {

@@ -1,5 +1,5 @@
-import type { Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { completeWithApiKeyText } from "../agent/side-completion.ts";
 import type { SpriteState } from "../sprite/manifest.ts";
 import {
 	createReplyableSpeechBubble,
@@ -11,9 +11,8 @@ import { type BtwCompletionAdapters, completeBtwText } from "./completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
 import { formatBtwAnswerPrompt } from "./prompt.ts";
 import { answerWithSideSession, summarizeWithSideSession } from "./session.ts";
+import { appendBtwEntry, appendBtwReset, restoreBtwThreadFromBranch } from "./thread-store.ts";
 
-const ENTRY = "pi-sprite:btw-entry";
-const RESET = "pi-sprite:btw-reset";
 type ActivityStatus = "idle" | "running" | "ready" | "error";
 
 interface BtwHooks {
@@ -31,17 +30,8 @@ async function directCompletion(
 	prompt: string,
 	maxTokens: number,
 ): Promise<string | undefined> {
-	if (!ctx.model) return undefined;
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-	if (!auth.ok || !auth.apiKey) return undefined;
-	const { complete } = await import("@earendil-works/pi-ai");
-	const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
-	const response = await complete(ctx.model, { messages }, { apiKey: auth.apiKey, headers: auth.headers, maxTokens });
-	return response.content
-		.filter((p): p is { type: "text"; text: string } => p.type === "text")
-		.map((p) => p.text)
-		.join("\n")
-		.trim();
+	const result = await completeWithApiKeyText(ctx, prompt, { maxTokens });
+	return result.ok ? result.text : undefined;
 }
 
 const defaultCompletionAdapters: BtwCompletionAdapters = {
@@ -49,29 +39,12 @@ const defaultCompletionAdapters: BtwCompletionAdapters = {
 	direct: directCompletion,
 };
 
-function isCustom(entry: unknown, type: string): entry is { type: "custom"; customType: string; data?: unknown } {
-	return Boolean(
-		entry &&
-			typeof entry === "object" &&
-			(entry as { type?: string }).type === "custom" &&
-			(entry as { customType?: string }).customType === type,
-	);
-}
 function restore(ctx: ExtensionContext): void {
-	thread = [];
-	let resetIndex = -1;
-	const branch = Array.from(ctx.sessionManager.getBranch() as Iterable<unknown>);
-	for (let i = 0; i < branch.length; i++) if (isCustom(branch[i], RESET)) resetIndex = i;
-	for (const entry of branch.slice(resetIndex + 1)) {
-		if (!isCustom(entry, ENTRY)) continue;
-		const data = entry.data as Partial<BtwEntry> | undefined;
-		if (data?.question && data.answer && data.timestamp) thread.push(data as BtwEntry);
-	}
+	thread = restoreBtwThreadFromBranch(ctx.sessionManager.getBranch() as Iterable<unknown>);
 }
 function visibleContext(ctx: ExtensionCommandContext): string {
 	const lines: string[] = [];
 	for (const entry of ctx.sessionManager.getBranch() as Iterable<any>) {
-		if (isCustom(entry, ENTRY) || isCustom(entry, RESET)) continue;
 		if (entry.type !== "message") continue;
 		const role = entry.message?.role;
 		if (role !== "user" && role !== "assistant") continue;
@@ -188,7 +161,7 @@ async function askSideQuestion(
 		const entry = { question, answer, timestamp: Date.now() };
 		if (persist) {
 			thread.push(entry);
-			pi.appendEntry(ENTRY, entry);
+			appendBtwEntry(pi, entry);
 		}
 		hooks.setState?.("success", { resetMs: 1800 });
 		hooks.setBtwStatus?.(thread.length ? "ready" : "idle", thread.length);
@@ -233,9 +206,6 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 	};
 	pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreAndReport(ctx));
 	pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => restoreAndReport(ctx));
-	pi.on("context", async (event: { messages: any[] }) => ({
-		messages: event.messages.filter((m) => m.customType !== ENTRY && m.customType !== RESET),
-	}));
 	pi.registerCommand("btw", {
 		description: "Continue the BTW side conversation outside the main thread",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
@@ -256,7 +226,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 		description: "Start a fresh BTW thread",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			thread = [];
-			pi.appendEntry(RESET, { timestamp: Date.now() });
+			appendBtwReset(pi);
 			hooks.setBtwStatus?.("idle", 0);
 			if (args.trim()) await askSideQuestion(pi, args.trim(), ctx, hooks);
 			else await showInteractiveBtw(pi, ctx, hooks);
@@ -266,7 +236,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 		description: "Clear the BTW thread",
 		handler: async (_args: string, ctx: ExtensionCommandContext) => {
 			thread = [];
-			pi.appendEntry(RESET, { timestamp: Date.now() });
+			appendBtwReset(pi);
 			hooks.setBtwStatus?.("idle", 0);
 			ctx.ui.notify("Cleared BTW thread.", "info");
 		},
@@ -281,7 +251,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 				`${args.trim() ? `${args.trim()}\n\n` : ""}Here is a side-thread transcript for context:\n\n${formatThread(thread)}`,
 			);
 			thread = [];
-			pi.appendEntry(RESET, { timestamp: Date.now() });
+			appendBtwReset(pi);
 			hooks.setBtwStatus?.("idle", 0);
 		},
 	});
@@ -298,7 +268,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 					`${args.trim() ? `${args.trim()}\n\n` : ""}Here is a summary of a side conversation:\n\n${summary}`,
 				);
 				thread = [];
-				pi.appendEntry(RESET, { timestamp: Date.now() });
+				appendBtwReset(pi);
 				hooks.setBtwStatus?.("idle", 0);
 			} catch (error) {
 				hooks.setBtwStatus?.("error", thread.length);
