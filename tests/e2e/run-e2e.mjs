@@ -126,9 +126,19 @@ if (process.env.PI_SPRITE_E2E_TUI === "1") {
 }
 
 if (process.env.PI_SPRITE_E2E_MODEL === "1") {
-	for (const scenario of ["btw", "recap"]) run("bash", ["tests/e2e/tmux-smoke.sh", scenario]);
+	for (const scenario of ["btw", "btw-no-personality", "btw-personality", "recap"])
+		run("bash", ["tests/e2e/tmux-smoke.sh", scenario]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw.txt", "--contains", "side thread"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw.txt", "--contains", "╰─╮"]);
+	run("node", [
+		"tests/e2e/assert-capture.mjs",
+		"artifacts/e2e/btw-no-personality.txt",
+		"--contains",
+		"side thread",
+		"--not-contains",
+		"ZORBLAX",
+	]);
+	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/btw-personality.txt", "--contains", "ZORBLAX"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/recap.txt", "--contains", "recap"]);
 	run("node", ["tests/e2e/assert-capture.mjs", "artifacts/e2e/recap.txt", "--contains", "╰─╮"]);
 }

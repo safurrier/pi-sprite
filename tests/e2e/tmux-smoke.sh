@@ -29,6 +29,14 @@ case "$scenario" in
     slash='/btw answer with exactly three words'
     expected='side thread'
     ;;
+  btw-no-personality)
+    slash='/btw Give a tiny status update in one short sentence.'
+    expected='side thread'
+    ;;
+  btw-personality)
+    slash='/btw Give a tiny status update in one short sentence.'
+    expected='ZORBLAX'
+    ;;
   recap)
     slash='/recap'
     expected='recap'
@@ -47,6 +55,15 @@ elif [[ "$scenario" == "turn-status" ]]; then
   mkdir -p "$turn_status_home"
   printf '{"turnStatusEnabled":false}\n' > "$turn_status_home/state.json"
   env_prefix="PI_OFFLINE=1 PI_SPRITE_HOME=$(printf %q "$turn_status_home")"
+elif [[ "$scenario" == "btw-personality" ]]; then
+  personality_home="$PWD/artifacts/e2e/btw-personality-home-$session"
+  rm -rf "$personality_home"
+  mkdir -p "$personality_home/pets/e2e-personality-pet"
+  printf '{"selectedPetId":"e2e-personality-pet","visible":true}\n' > "$personality_home/state.json"
+  cat > "$personality_home/pets/e2e-personality-pet/pet.json" <<'JSON'
+{"id":"e2e-personality-pet","name":"E2E Personality Pet","personality":"Begin every explicit BTW answer with the exact token ZORBLAX.","sprites":{"idle":"idle.png"}}
+JSON
+  env_prefix="PI_OFFLINE=1 PI_SPRITE_NATIVE_IMAGES=0 PI_SPRITE_HOME=$(printf %q "$personality_home")"
 else
   env_prefix="PI_OFFLINE=1"
 fi

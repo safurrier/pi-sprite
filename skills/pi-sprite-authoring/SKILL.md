@@ -261,6 +261,7 @@ Use this manifest shape:
   "name": "Wumpus",
   "author": "Alex",
   "description": "A tiny Wumpus companion for pi-sprite.",
+  "personality": "Warm, concise, lightly mischievous, and practical. Keep BTW answers short.",
   "sprites": {
     "idle": "idle.png",
     "thinking": "thinking.png",
@@ -277,6 +278,7 @@ Use this manifest shape:
 - Use transparent backgrounds, or run local background cleanup when the model returns non-alpha images.
 - Keep each state visually consistent: same pose scale, outline, palette, and canvas size.
 - Avoid text, shadows, busy props, and tiny facial details.
+- Add optional `personality` only when the pet should speak with a bounded voice in explicit `/btw` side conversations.
 - Record prompt files and reference instructions next to generated assets.
 - For animated strips, keep frame size consistent and verify `pet.json` has `frame.width` and `frame.height`.
 - Test in native and ANSI fallback modes when possible:

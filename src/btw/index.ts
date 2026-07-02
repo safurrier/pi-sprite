@@ -9,6 +9,7 @@ import {
 } from "../ui/overlay.ts";
 import { type BtwCompletionAdapters, completeBtwText } from "./completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
+import { formatBtwAnswerPrompt } from "./prompt.ts";
 import { answerWithSideSession, summarizeWithSideSession } from "./session.ts";
 
 const ENTRY = "pi-sprite:btw-entry";
@@ -20,6 +21,7 @@ interface BtwHooks {
 	setBtwStatus?: (status: ActivityStatus, count?: number) => void;
 	getBubblePlacement?: () => SpriteBubblePlacement;
 	getSpriteName?: () => string;
+	getSpritePersonality?: () => string | undefined;
 }
 
 let thread: BtwEntry[] = [];
@@ -84,6 +86,7 @@ function visibleContext(ctx: ExtensionCommandContext): string {
 	}
 	return lines.slice(-10).join("\n\n");
 }
+
 async function showBtw(
 	ctx: ExtensionCommandContext,
 	sections: OverlaySection[],
@@ -163,21 +166,14 @@ async function askSideQuestion(
 		if (!showBubble) throw new Error(message);
 		return ctx.ui.notify(message, "warning");
 	}
-	const prompt = [
-		persist
-			? "You are continuing a side conversation for a Pi coding session. This side thread stays outside the main thread unless the user later injects it."
-			: "You are answering a one-off side question for a Pi coding session. Do not assume this answer will continue the current BTW thread.",
-		"Be concise and practical.",
-		"",
-		"Main-session context:",
-		visibleContext(ctx) || "(No main context available.)",
-		"",
-		includeThread && thread.length
-			? `Existing BTW thread:\n${formatThread(thread)}`
-			: "Existing BTW thread: (not included)",
-		"",
-		`Side question: ${question}`,
-	].join("\n");
+	const prompt = formatBtwAnswerPrompt({
+		question,
+		persist,
+		mainContext: visibleContext(ctx),
+		threadText: includeThread && thread.length ? formatThread(thread) : undefined,
+		spriteName: hooks.getSpriteName?.(),
+		personality: hooks.getSpritePersonality?.(),
+	});
 	hooks.setState?.("thinking");
 	hooks.setBtwStatus?.("running", thread.length);
 	try {

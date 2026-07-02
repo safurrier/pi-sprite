@@ -96,5 +96,6 @@ export default function piSpriteExtension(pi: ExtensionAPI) {
 		setBtwStatus: (status, count) => sprite.setBtwStatus(status, count),
 		getBubblePlacement: () => sprite.getBubblePlacement(),
 		getSpriteName: () => sprite.getSpriteName(),
+		getSpritePersonality: () => sprite.getSpritePersonality(),
 	});
 }
