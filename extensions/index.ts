@@ -1,4 +1,5 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { registerPiSpriteContextFilter } from "../src/agent/session-entries.ts";
 import { registerBtwCommands } from "../src/btw/index.ts";
 import { registerContextCommand } from "../src/context/index.ts";
 import { registerRecapCommand } from "../src/recap/index.ts";
@@ -9,6 +10,7 @@ import { classifyTurnStatus } from "../src/sprite/turn-status.ts";
 export const LIVE_STATUS_INTERVAL_MS = 5 * 60 * 1000;
 
 export default function piSpriteExtension(pi: ExtensionAPI) {
+	registerPiSpriteContextFilter(pi);
 	const sprite = createSpriteRuntime();
 	let turnStatusRun = 0;
 	let liveStatusTimer: ReturnType<typeof setTimeout> | undefined;

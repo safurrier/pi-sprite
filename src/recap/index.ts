@@ -1,5 +1,6 @@
-import { complete, type Message } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
+import { RECAP_ENTRY } from "../agent/session-entries.ts";
+import { completeWithApiKeyText } from "../agent/side-completion.ts";
 import { completeWithSideSession } from "../agent/side-session.ts";
 import type { SpriteState } from "../sprite/manifest.ts";
 import { createScrollableSpeechBubble, type SpriteBubblePlacement } from "../ui/overlay.ts";
@@ -68,30 +69,11 @@ async function showRecap(
 	);
 }
 
-function completionText(response: Awaited<ReturnType<typeof complete>>): string {
-	return response.content
-		.filter((p): p is { type: "text"; text: string } => p.type === "text")
-		.map((p) => p.text)
-		.join("\n")
-		.trim();
-}
-
 async function completeRecapWithApiKey(ctx: ExtensionCommandContext, text: string): Promise<RecapGenerationResult> {
-	if (!ctx.model) return { ok: false, message: "No active model selected." };
-	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(ctx.model);
-	if (!auth.ok || !auth.apiKey) return { ok: false, message: auth.ok ? "No API key available." : auth.error };
-	const messages: Message[] = [
-		{ role: "user", content: [{ type: "text", text: recapPrompt(text) }], timestamp: Date.now() },
-	];
-	const response = await complete(
-		ctx.model,
-		{ systemPrompt: SYSTEM_PROMPT, messages },
-		{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: 500 },
-	);
-	const recap = completionText(response);
-	return recap
-		? { ok: true, recap, source: "api-key-fallback" }
-		: { ok: false, message: "API-key fallback returned no recap text." };
+	const result = await completeWithApiKeyText(ctx, recapPrompt(text), { maxTokens: 500, systemPrompt: SYSTEM_PROMPT });
+	return result.ok
+		? { ok: true, recap: result.text, source: "api-key-fallback" }
+		: { ok: false, message: result.message };
 }
 
 export function registerRecapCommand(pi: ExtensionAPI, hooks: RecapHooks = {}) {
@@ -113,7 +95,7 @@ export function registerRecapCommand(pi: ExtensionAPI, hooks: RecapHooks = {}) {
 					hooks.setRecapStatus?.("error");
 					return ctx.ui.notify(result.message, "error");
 				}
-				pi.appendEntry("pi-sprite:recap", { recap: result.recap, source: result.source, timestamp: Date.now() });
+				pi.appendEntry(RECAP_ENTRY, { recap: result.recap, source: result.source, timestamp: Date.now() });
 				hooks.setState?.("success", { resetMs: 1800 });
 				hooks.setRecapStatus?.("ready");
 				await showRecap(ctx, result.recap, hooks.getBubblePlacement?.(), hooks.getSpriteName?.());

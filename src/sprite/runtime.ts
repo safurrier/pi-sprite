@@ -3,11 +3,13 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SpriteBubblePlacement } from "../ui/overlay.ts";
+import { registerSpriteCommands, type SpriteCommandRuntime } from "./commands.ts";
+import { downloadToBuffer } from "./download.ts";
 import { formatLiveStatusFooter, type LiveTurnStatus } from "./live-status-format.ts";
-import { importPetFolder, importPetZip, listPets, loadPet } from "./loader.ts";
+import { importPetZip, loadPet } from "./loader.ts";
 import type { SpriteState } from "./manifest.ts";
 import { spriteHome, statePath } from "./paths.ts";
-import { installPetdexPet, listPetdexPets } from "./petdex.ts";
+
 import {
 	buildKittyPlaceholderSpriteWidget,
 	buildNativeSpriteWidget,
@@ -337,12 +339,7 @@ export function createSpriteRuntime() {
 	}
 
 	async function importPetUrl(urlText: string) {
-		const url = new URL(urlText);
-		if (url.protocol !== "https:") throw new Error("/pet import-url requires an https URL");
-		const response = await fetch(url);
-		if (!response.ok) throw new Error(`download failed (${response.status})`);
-		const bytes = Buffer.from(await response.arrayBuffer());
-		if (bytes.length > 25 * 1024 * 1024) throw new Error("download is too large");
+		const bytes = await downloadToBuffer(urlText);
 		const tmp = join(spriteHome(), `import-${Date.now()}.zip`);
 		mkdirSync(spriteHome(), { recursive: true });
 		writeFileSync(tmp, bytes);
@@ -459,185 +456,69 @@ export function createSpriteRuntime() {
 			}
 			persist();
 		},
+		setCommandContext(nextCtx: ExtensionContext) {
+			ctx = nextCtx;
+		},
+		statusText() {
+			return `pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}; size=${size}; label=${label ? "on" : "off"}; align=${align}; turn-status=${turnStatusEnabled ? "on" : "off"}; live-status=${liveStatusEnabled ? "on" : "off"}${turnStatus && turnStatus !== "pending" ? `; ${formatTurnStatusFooter(turnStatus)}` : ""}${liveStatus && liveStatus !== "pending" ? `; ${formatLiveStatusFooter(liveStatus)}` : ""}`;
+		},
+		selectPet(id: string) {
+			activatePet(id);
+		},
+		importPetUrl,
+		show() {
+			visible = true;
+			persist();
+			lastSignature = "";
+			render();
+		},
+		hide() {
+			visible = false;
+			persist();
+			render();
+		},
+		setSize(nextSize: SpriteSize) {
+			size = nextSize;
+			persist();
+			lastSignature = "";
+			render();
+		},
+		setLabel(nextLabel: boolean) {
+			label = nextLabel;
+			persist();
+			lastSignature = "";
+			render();
+		},
+		setAlign(nextAlign: SpriteAlign) {
+			align = nextAlign;
+			persist();
+			lastSignature = "";
+			render();
+		},
+		setTurnStatusEnabled(enabled: boolean) {
+			turnStatusConfigured = true;
+			turnStatusEnabled = enabled;
+			if (!turnStatusEnabled) turnStatus = undefined;
+			persist();
+			updateFooter();
+		},
+		setLiveStatusEnabled(enabled: boolean) {
+			liveStatusConfigured = true;
+			liveStatusEnabled = enabled;
+			liveStatusGeneration++;
+			if (!liveStatusEnabled) liveStatus = undefined;
+			persist();
+			updateFooter();
+		},
+		clearNative(commandCtx: ExtensionContext) {
+			stopAnimation();
+			renderGeneration++;
+			const clearLines = [...clearTrackedNativeSpriteImages(), ...clearAllNativeSpriteImages()];
+			if (clearLines.length) commandCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
+			lastSignature = "";
+		},
 		registerCommands(pi: ExtensionAPI) {
-			pi.registerCommand("pet", {
-				description:
-					"sprite companion: list | choose <id> | import <path> | import-url <url> | gallery | search <query> | preview <slug> | install <slug> | hide | show | size <tiny|small|medium|large> | label <on|off> | align <left|right> | turn-status <on|off|clear> | live-status <on|off|clear> | clear-native",
-				handler: async (args: string, commandCtx: ExtensionContext) => {
-					ctx = commandCtx;
-					const [cmd = "", ...rest] = args.trim().split(/\s+/u).filter(Boolean);
-					const value = rest.join(" ").trim();
-					switch (cmd || "status") {
-						case "status":
-							commandCtx.ui.notify(
-								`pi-sprite: ${visible ? "shown" : "hidden"}; pet=${selectedName()}; state=${state}; size=${size}; label=${label ? "on" : "off"}; align=${align}; turn-status=${turnStatusEnabled ? "on" : "off"}; live-status=${liveStatusEnabled ? "on" : "off"}${turnStatus && turnStatus !== "pending" ? `; ${formatTurnStatusFooter(turnStatus)}` : ""}${liveStatus && liveStatus !== "pending" ? `; ${formatLiveStatusFooter(liveStatus)}` : ""}`,
-								"info",
-							);
-							break;
-						case "list": {
-							const pets = listPets();
-							commandCtx.ui.notify(
-								pets.length ? pets.map((p) => `${p.id} - ${p.manifest.name}`).join("\n") : "No imported pets yet.",
-								"info",
-							);
-							break;
-						}
-						case "choose": {
-							if (!value) throw new Error("Usage: /pet choose <id>");
-							activatePet(value);
-							commandCtx.ui.notify(`Selected ${selectedName()}.`, "info");
-							break;
-						}
-						case "import": {
-							if (!value) throw new Error("Usage: /pet import <path>");
-							const pet = importPetFolder(value);
-							activatePet(pet.id);
-							commandCtx.ui.notify(`Imported and selected ${pet.manifest.name}.`, "info");
-							break;
-						}
-						case "import-url": {
-							if (!value) throw new Error("Usage: /pet import-url <url>");
-							const pet = await importPetUrl(value);
-							activatePet(pet.id);
-							commandCtx.ui.notify(`Imported and selected ${pet.manifest.name}.`, "info");
-							break;
-						}
-						case "gallery":
-						case "search": {
-							const pets = await listPetdexPets(value);
-							commandCtx.ui.notify(
-								pets.length
-									? `Petdex gallery:\n${pets.map((pet) => `${pet.id} - ${pet.displayName}${pet.installed ? " (installed)" : ""}`).join("\n")}`
-									: "No Petdex pets matched.",
-								"info",
-							);
-							break;
-						}
-						case "preview": {
-							if (!value) throw new Error("Usage: /pet preview <slug>");
-							const pet =
-								(await listPetdexPets(value)).find((candidate) => candidate.id === value) ??
-								(await listPetdexPets(value))[0];
-							if (!pet) throw new Error(`No Petdex pet found for ${value}`);
-							commandCtx.ui.notify(
-								[
-									pet.displayName,
-									`id: ${pet.id}`,
-									pet.kind ? `kind: ${pet.kind}` : "",
-									pet.submittedBy ? `by: ${pet.submittedBy}` : "",
-									`installed: ${pet.installed ? "yes" : "no"}`,
-									`Install: /pet install ${pet.id}`,
-								]
-									.filter(Boolean)
-									.join("\n"),
-								"info",
-							);
-							break;
-						}
-						case "install": {
-							if (!value) throw new Error("Usage: /pet install <slug>");
-							const pet = await installPetdexPet(value);
-							activatePet(pet.id);
-							commandCtx.ui.notify(`Installed and selected ${pet.manifest.name}.`, "info");
-							break;
-						}
-						case "hide":
-							visible = false;
-							persist();
-							render();
-							commandCtx.ui.notify("pi-sprite hidden. /pet show to restore.", "info");
-							break;
-						case "show":
-							visible = true;
-							persist();
-							lastSignature = "";
-							render();
-							commandCtx.ui.notify("pi-sprite shown.", "info");
-							break;
-						case "size": {
-							if (!["tiny", "small", "medium", "large"].includes(value)) {
-								throw new Error("Usage: /pet size <tiny|small|medium|large>");
-							}
-							size = value as SpriteSize;
-							persist();
-							lastSignature = "";
-							render();
-							commandCtx.ui.notify(`pi-sprite size set to ${size}.`, "info");
-							break;
-						}
-						case "label": {
-							if (value !== "on" && value !== "off") throw new Error("Usage: /pet label <on|off>");
-							label = value === "on";
-							persist();
-							lastSignature = "";
-							render();
-							commandCtx.ui.notify(`pi-sprite label ${label ? "shown" : "hidden"}.`, "info");
-							break;
-						}
-						case "align": {
-							if (value !== "left" && value !== "right") throw new Error("Usage: /pet align <left|right>");
-							align = value;
-							persist();
-							lastSignature = "";
-							render();
-							commandCtx.ui.notify(`pi-sprite aligned ${align}.`, "info");
-							break;
-						}
-						case "turn-status": {
-							if (value !== "on" && value !== "off" && value !== "clear") {
-								throw new Error("Usage: /pet turn-status <on|off|clear>");
-							}
-							if (value === "clear") {
-								turnStatus = undefined;
-								updateFooter();
-								commandCtx.ui.notify("Cleared pi-sprite turn status.", "info");
-								break;
-							}
-							turnStatusConfigured = true;
-							turnStatusEnabled = value === "on";
-							if (!turnStatusEnabled) turnStatus = undefined;
-							persist();
-							updateFooter();
-							commandCtx.ui.notify(`pi-sprite turn status ${turnStatusEnabled ? "enabled" : "disabled"}.`, "info");
-							break;
-						}
-						case "live-status": {
-							if (value !== "on" && value !== "off" && value !== "clear") {
-								throw new Error("Usage: /pet live-status <on|off|clear>");
-							}
-							if (value === "clear") {
-								liveStatusGeneration++;
-								liveStatus = undefined;
-								updateFooter();
-								commandCtx.ui.notify("Cleared pi-sprite live status.", "info");
-								break;
-							}
-							liveStatusConfigured = true;
-							liveStatusEnabled = value === "on";
-							liveStatusGeneration++;
-							if (!liveStatusEnabled) liveStatus = undefined;
-							persist();
-							updateFooter();
-							commandCtx.ui.notify(`pi-sprite live status ${liveStatusEnabled ? "enabled" : "disabled"}.`, "info");
-							break;
-						}
-						case "clear-native": {
-							stopAnimation();
-							renderGeneration++;
-							const clearLines = [...clearTrackedNativeSpriteImages(), ...clearAllNativeSpriteImages()];
-							if (clearLines.length) commandCtx.ui.setWidget("pi-sprite", clearLines, { placement: "belowEditor" });
-							lastSignature = "";
-							commandCtx.ui.notify("Requested native terminal image cleanup. /pet show redraws the sprite.", "info");
-							break;
-						}
-						default:
-							commandCtx.ui.notify(
-								"Usage: /pet [list|choose <id>|import <path>|import-url <url>|gallery|search <query>|preview <slug>|install <slug>|hide|show|size <tiny|small|medium|large>|label <on|off>|align <left|right>|turn-status <on|off|clear>|live-status <on|off|clear>|clear-native]",
-								"info",
-							);
-					}
-				},
-			});
+			registerSpriteCommands(pi, this as SpriteCommandRuntime);
 		},
 	};
 }

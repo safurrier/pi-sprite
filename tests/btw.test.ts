@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BTW_ENTRY, BTW_RESET } from "../src/agent/session-entries.ts";
 import { completeBtwText } from "../src/btw/completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "../src/btw/format.ts";
 import { formatBtwAnswerPrompt } from "../src/btw/prompt.ts";
+import { restoreBtwThreadFromBranch } from "../src/btw/thread-store.ts";
 
 const entries: BtwEntry[] = [
 	{ question: "Why native images?", answer: "Because Ghostty can render crisp sprites.", timestamp: 1 },
@@ -71,6 +73,24 @@ test("BTW completion falls back to direct completion when side session fails", a
 		},
 	});
 	assert.equal(answer, "fallback answer");
+});
+
+test("BTW thread restore keeps entries after the latest reset only", () => {
+	const branch = [
+		{ type: "custom", customType: BTW_ENTRY, data: entries[0] },
+		{ type: "custom", customType: BTW_RESET, data: { timestamp: 3 } },
+		{ type: "custom", customType: BTW_ENTRY, data: entries[1] },
+	];
+
+	assert.deepEqual(restoreBtwThreadFromBranch(branch), [entries[1]]);
+});
+
+test("BTW thread restore does not leak separate branch state", () => {
+	const firstBranch = [{ type: "custom", customType: BTW_ENTRY, data: entries[0] }];
+	const secondBranch = [{ type: "custom", customType: BTW_ENTRY, data: entries[1] }];
+
+	assert.deepEqual(restoreBtwThreadFromBranch(firstBranch), [entries[0]]);
+	assert.deepEqual(restoreBtwThreadFromBranch(secondBranch), [entries[1]]);
 });
 
 test("BTW answer prompt includes selected sprite personality as bounded style guidance", () => {
