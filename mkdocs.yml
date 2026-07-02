@@ -1,0 +1,61 @@
+site_name: pi-sprite
+site_description: Terminal sprite companion, context visualizer, recap bubble, and side-thread helper for Pi
+site_url: https://safurrier.github.io/pi-sprite/
+repo_url: https://github.com/safurrier/pi-sprite
+repo_name: safurrier/pi-sprite
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep-purple
+      accent: deep-purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep-purple
+      accent: deep-purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - toc.follow
+    - content.code.copy
+
+exclude_docs: |
+  AGENTS.md
+  README.md
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - toc:
+      permalink: true
+
+nav:
+  - Home: index.md
+  - Sprite Authoring: tutorials/authoring-sprites.md
+  - Explanation:
+      - Architecture: explanation/architecture.md
+  - Reference:
+      - Configuration: reference/configuration.md
+      - Pet Manifest: reference/pet-manifest.md
+      - Rendering Modes: reference/rendering-modes.md

@@ -37,10 +37,11 @@ pi install git:github.com/safurrier/pi-sprite
 
 | Command | Use it for |
 | --- | --- |
-| `/pet` | Show, hide, choose, import, and configure the sprite. |
+| `/pet` | Show, hide, choose, import, author, and configure the sprite. |
+| `/sprite` | Package-specific alias for `/pet`, useful when another package also owns pet-like commands. |
 | `/context` | Open a Claude-style context usage visualizer. |
 | `/recap` | Generate a compact recap of the current session in a speech bubble. |
-| `/btw` | Ask side questions without adding normal messages to the main thread. |
+| `/btw` | Ask side questions without adding normal messages to the main thread, or generate a recap into the side thread. |
 
 The extension also updates the sprite automatically during agent turns:
 
@@ -59,6 +60,10 @@ Useful `/pet` commands:
 /pet status
 /pet list
 /pet choose <id>
+/pet import <path>
+/pet import-url <url>
+/pet create [brief]
+/pet author [brief]
 /pet hide
 /pet show
 /pet size tiny|small|medium|large
@@ -147,7 +152,15 @@ Codex/Petdex `pet.json + spritesheet.webp` compatibility is also supported. `pi-
 
 ### Author a sprite effectively
 
-This package ships the `pi-sprite-authoring` skill. Use it when you want an agent to turn references, generated art, or hand-drawn frames into an importable pet without losing character consistency across states:
+This package ships the `pi-sprite-authoring` skill. Use it when you want an agent to turn references, generated art, or hand-drawn frames into an importable pet without losing character consistency across states.
+
+Start the guided flow from Pi:
+
+```text
+/pet create tiny desk cat with cozy pixel-art vibes
+```
+
+You can also invoke the skill directly:
 
 ```text
 /skill:pi-sprite-authoring
@@ -212,13 +225,31 @@ Recap generation first uses an isolated, no-tools Pi side session with the curre
 /btw:ask <question>
 /btw:new [message]
 /btw:clear
+/btw:recap
+/btw recap
 /btw:inject
 /btw:summarize
 ```
 
-`/btw` is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups and `/btw` to reopen the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread.
+`/btw` is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups and `/btw` to reopen the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread. Use `/btw:recap` or `/btw recap` to generate the normal session recap inside the BTW thread.
 
 Answers appear in an interactive speech bubble that points toward the sprite. Nothing is injected back into the main conversation unless you explicitly run `/btw:inject` or `/btw:summarize`.
+
+## Documentation
+
+Durable docs live under `docs/` and are published with MkDocs Material through GitHub Pages.
+
+Build the docs locally:
+
+```bash
+uvx --with mkdocs-material mkdocs build --strict
+```
+
+Start with:
+
+- `docs/index.md` for the docs landing page
+- `docs/tutorials/authoring-sprites.md` for custom pet authoring
+- `docs/reference/configuration.md` for default pet state and sprite home setup
 
 ## Development
 

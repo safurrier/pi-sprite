@@ -16,6 +16,7 @@ Use focused Node tests while iterating, then run the broad local gate before han
 - **Fast gate**: `mise run check`.
 - **Full verification**: `mise run verify`.
 - **Package smoke**: `node tests/e2e/package-smoke.mjs --isolated` or `node tests/e2e/package-smoke.mjs --full-config`.
+- **Docs build**: `uvx --with mkdocs-material mkdocs build --strict`.
 - **HK config diagnostics**: `HARNESS_KIT_CONFIG=.harness/harness.toml hk config validate --target . --json`.
 
 ## Gotchas
@@ -52,7 +53,9 @@ Use focused Node tests while iterating, then run the broad local gate before han
 |------|--------------|
 | `.harness/system.toml` | Component map and cross-cutting invariants for extension lifecycle, rendering, commands, packaging, and validation. |
 | `.harness/profiles/pi-sprite-root.toml` | Validation and review contract for HK-driven work. |
-| `docs/pi-sprite-implementation-spec.md` | Deeper implementation notes and original design context. |
+| `docs/AGENTS.md` | Docs routing index for MkDocs pages and durable references. |
+| `mkdocs.yml` | MkDocs Material navigation and site configuration. |
+| `.github/workflows/docs.yml` | GitHub Pages build/deploy workflow. |
 | `skills/pi-sprite-authoring/SKILL.md` | Packaged skill for generating/importing custom pets and animations. |
 | `tests/e2e/` | Package smoke and optional TUI/model/network e2e helpers. |
 
