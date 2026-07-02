@@ -58,6 +58,7 @@ export async function downloadToBuffer(urlText: string, options: DownloadOptions
 	const timer = setTimeout(() => controller.abort(), timeoutMs);
 	try {
 		const response = await fetch(url, { headers: { accept: "*/*" }, signal: controller.signal });
+		if (response.url) parseSafeDownloadUrl(response.url, options);
 		if (!response.ok) throw new Error(`download failed for ${url.href} (${response.status})`);
 		const declaredLength = contentLength(response);
 		if (declaredLength !== undefined && declaredLength > maxBytes) throw new Error("download is too large");

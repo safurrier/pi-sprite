@@ -43,6 +43,22 @@ test("download rejects oversized streamed bodies", async () => {
 	});
 });
 
+test("download revalidates the final response URL after redirects", async () => {
+	await withFetch(
+		(async () => {
+			const response = new Response(Buffer.from("zip"));
+			Object.defineProperty(response, "url", { value: "http://example.com/pet.zip" });
+			return response;
+		}) as typeof fetch,
+		async () => {
+			await assert.rejects(
+				() => downloadToBuffer("https://example.com/pet.zip"),
+				/pet downloads require an https URL/u,
+			);
+		},
+	);
+});
+
 test("download reports timeout when fetch is aborted", async () => {
 	await withFetch(
 		((_url, init) =>
