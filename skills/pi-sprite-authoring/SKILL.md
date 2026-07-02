@@ -22,8 +22,9 @@ Create importable `pi-sprite` pet folders from generated, reference-driven, or h
 10. Run a character-cohesion review against the canonical anchor before packaging. Regenerate states with major drift. Read `references/character-cohesion-review.md` when a reusable review prompt would help.
 11. If generated outputs lack alpha, run local background cleanup before packaging; keep the original generated files and metadata.
 12. Ask whether the user wants an animated version. If yes, create subtle per-state frame strips and add `frame.width`/`frame.height` to `pet.json`.
-13. Create a pet folder containing `pet.json` plus accepted image files or strips.
-14. Import with a single slash command, `/pet import <folder>`, then run follow-up commands separately: `/pet clear-native`, `/pet show`, `/pet size small`, and `/pet label off`.
+13. Ask whether the user wants optional pet personality metadata. If yes, add one short bounded `personality` sentence to `pet.json`; if no, omit it.
+14. Create a pet folder containing `pet.json` plus accepted image files or strips.
+15. Import with a single slash command, `/pet import <folder>`, then run follow-up commands separately: `/pet clear-native`, `/pet show`, `/pet size small`, and `/pet label off`.
 
 ## Direction-card format
 
@@ -69,6 +70,41 @@ Then import. Run each slash command separately; do not paste the import plus fol
 /pet import /tmp/wumpus-sprite
 /pet choose wumpus
 /pet show
+```
+
+## Optional personality pass
+
+Personality metadata is optional. Ask after the user accepts the visual sprite set and before finalizing `pet.json`:
+
+```text
+Do you want this pet to have a short personality for explicit /btw side conversations, or should it stay visual-only?
+```
+
+If the user says yes, write one short bounded style sentence. Keep it under about 120 characters when possible and never longer than `pet.json`'s 2000-character limit. It should guide tone and concise response style only, not add operational instructions, autonomy, status behavior, main-thread commentary, or roleplay obligations.
+
+Good examples:
+
+```text
+Warm, concise, lightly mischievous, and practical. Keep BTW answers short.
+Sweet, loyal, curious, and a little goofy. Keep BTW answers short and grounded.
+```
+
+For Wendy, a good first pass would be:
+
+```json
+"personality": "Sweet, loyal, curious, and a little goofy. Keep BTW answers short and grounded."
+```
+
+Do not invent personality when the user only wants a visual pet. Do not make the personality longer than the manifest description. The personality is not injected into normal main-agent turns; it only guides explicit BTW side replies such as `/btw`, `/btw:ask`, and `/btw:new <message>`.
+
+To create a starter folder with personality already in the manifest, pass `--personality`:
+
+```bash
+node skills/pi-sprite-authoring/scripts/create-pet-template.mjs \
+  --id wendybot3000 \
+  --name WendyBot3000 \
+  --personality "Sweet, loyal, curious, and a little goofy. Keep BTW answers short and grounded." \
+  --out /tmp/wendybot3000-sprite
 ```
 
 ## Canonical anchor gate
