@@ -96,6 +96,7 @@ export default function piSpriteExtension(pi: ExtensionAPI) {
 	registerBtwCommands(pi, {
 		setState: (state, options) => sprite.setState(state, options),
 		setBtwStatus: (status, count) => sprite.setBtwStatus(status, count),
+		setRecapStatus: (status) => sprite.setRecapStatus(status),
 		getBubblePlacement: () => sprite.getBubblePlacement(),
 		getSpriteName: () => sprite.getSpriteName(),
 		getSpritePersonality: () => sprite.getSpritePersonality(),

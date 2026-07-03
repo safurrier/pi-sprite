@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { BTW_ENTRY, BTW_RESET } from "../src/agent/session-entries.ts";
+import { BTW_ENTRY, BTW_RESET, RECAP_ENTRY } from "../src/agent/session-entries.ts";
 import { completeBtwText } from "../src/btw/completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "../src/btw/format.ts";
 import { formatBtwAnswerPrompt } from "../src/btw/prompt.ts";
+import { recapIntoBtw } from "../src/btw/recap.ts";
 import { restoreBtwThreadFromBranch } from "../src/btw/thread-store.ts";
 
 const entries: BtwEntry[] = [
@@ -91,6 +92,54 @@ test("BTW thread restore does not leak separate branch state", () => {
 
 	assert.deepEqual(restoreBtwThreadFromBranch(firstBranch), [entries[0]]);
 	assert.deepEqual(restoreBtwThreadFromBranch(secondBranch), [entries[1]]);
+});
+
+test("BTW recap stores the normal recap as a conversational side-thread turn", async () => {
+	const appended: Array<{ type: string; data: unknown }> = [];
+	const statuses: string[] = [];
+	const ctx = {
+		model: { provider: "test", model: "test-model" },
+		ui: {
+			notify() {},
+		},
+		sessionManager: {
+			getBranch: () => [
+				{ type: "message", message: { role: "user", content: "Fix the sprite alias." } },
+				{ type: "message", message: { role: "assistant", content: "Added a /sprite alias." } },
+			],
+		},
+	} as never;
+	const pi = {
+		appendEntry(type: string, data: unknown) {
+			appended.push({ type, data });
+		},
+	} as never;
+
+	await recapIntoBtw(
+		pi,
+		ctx,
+		[],
+		{
+			setBtwStatus: (status) => statuses.push(`btw:${status}`),
+			setRecapStatus: (status) => statuses.push(`recap:${status}`),
+		},
+		{
+			generate: async (_ctx, text) => {
+				assert.match(text, /user: Fix the sprite alias/u);
+				assert.match(text, /assistant: Added a \/sprite alias/u);
+				return { ok: true, recap: "TL;DR: Added a /sprite alias.", source: "side-session" };
+			},
+		},
+	);
+
+	assert.deepEqual(statuses, ["btw:running", "recap:running", "btw:ready", "recap:ready"]);
+	assert.equal(appended[0]?.type, RECAP_ENTRY);
+	assert.equal(appended[1]?.type, BTW_ENTRY);
+	assert.deepEqual(appended[1]?.data, {
+		question: "Recap the current main session.",
+		answer: "TL;DR: Added a /sprite alias.",
+		timestamp: (appended[1]?.data as { timestamp: number }).timestamp,
+	});
 });
 
 test("BTW answer prompt includes selected sprite personality as bounded style guidance", () => {

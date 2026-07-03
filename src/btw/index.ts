@@ -1,5 +1,8 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { completeWithApiKeyText } from "../agent/side-completion.ts";
+import { completeWithSideSession } from "../agent/side-session.ts";
+import { completeRecapWithApiKey } from "../recap/direct.ts";
+import { generateRecapText } from "../recap/generation.ts";
 import type { SpriteState } from "../sprite/manifest.ts";
 import {
 	createReplyableSpeechBubble,
@@ -10,6 +13,7 @@ import {
 import { type BtwCompletionAdapters, completeBtwText } from "./completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
 import { formatBtwAnswerPrompt } from "./prompt.ts";
+import { recapIntoBtw as addRecapToBtw, type BtwRecapAdapters } from "./recap.ts";
 import { answerWithSideSession, summarizeWithSideSession } from "./session.ts";
 import { appendBtwEntry, appendBtwReset, restoreBtwThreadFromBranch } from "./thread-store.ts";
 
@@ -18,6 +22,7 @@ type ActivityStatus = "idle" | "running" | "ready" | "error";
 interface BtwHooks {
 	setState?: (state: SpriteState, options?: { resetMs?: number }) => void;
 	setBtwStatus?: (status: ActivityStatus, count?: number) => void;
+	setRecapStatus?: (status: ActivityStatus) => void;
 	getBubblePlacement?: () => SpriteBubblePlacement;
 	getSpriteName?: () => string;
 	getSpritePersonality?: () => string | undefined;
@@ -199,6 +204,21 @@ function sendToMain(pi: ExtensionAPI, ctx: ExtensionCommandContext, content: str
 	if (ctx.isIdle()) pi.sendUserMessage(content);
 	else pi.sendUserMessage(content, { deliverAs: "followUp" });
 }
+
+const defaultBtwRecapAdapters: BtwRecapAdapters = {
+	generate: async (ctx, text) =>
+		generateRecapText(ctx, text, {
+			sideSession: completeWithSideSession,
+			direct: completeRecapWithApiKey,
+		}),
+};
+
+async function recapIntoBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, hooks: BtwHooks = {}): Promise<void> {
+	await addRecapToBtw(pi, ctx, thread, hooks, defaultBtwRecapAdapters, {
+		afterSuccess: async () => showInteractiveBtw(pi, ctx, hooks),
+	});
+}
+
 export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 	const restoreAndReport = (ctx: ExtensionContext) => {
 		restore(ctx);
@@ -207,10 +227,11 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 	pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreAndReport(ctx));
 	pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => restoreAndReport(ctx));
 	pi.registerCommand("btw", {
-		description: "Continue the BTW side conversation outside the main thread",
+		description: "Continue the BTW side conversation outside the main thread; use /btw recap for a recap thread",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const question = args.trim();
 			if (!question) return showInteractiveBtw(pi, ctx, hooks);
+			if (question === "recap") return recapIntoBtw(pi, ctx, hooks);
 			await askSideQuestion(pi, question, ctx, hooks);
 		},
 	});
@@ -230,6 +251,12 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 			hooks.setBtwStatus?.("idle", 0);
 			if (args.trim()) await askSideQuestion(pi, args.trim(), ctx, hooks);
 			else await showInteractiveBtw(pi, ctx, hooks);
+		},
+	});
+	pi.registerCommand("btw:recap", {
+		description: "Generate the normal session recap inside the BTW side thread",
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			await recapIntoBtw(pi, ctx, hooks);
 		},
 	});
 	pi.registerCommand("btw:clear", {
