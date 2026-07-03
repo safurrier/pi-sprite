@@ -9,7 +9,7 @@
 		}
 	},
 	"files": {
-		"includes": ["**", "!.pi", "!.harness-local", "!node_modules", "!artifacts", "!test-results"]
+		"includes": ["**", "!.pi", "!.harness-local", "!node_modules", "!artifacts", "!test-results", "!site"]
 	},
 	"linter": {
 		"enabled": true,

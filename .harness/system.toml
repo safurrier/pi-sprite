@@ -29,13 +29,13 @@ id = "sprite-runtime-rendering"
 title = "Sprite runtime and rendering"
 kind = "tui-widget-runtime"
 paths = ["src/sprite/runtime.ts", "src/sprite/commands.ts", "src/sprite/renderer.ts", "src/sprite/turn-status*.ts", "src/sprite/live-status*.ts", "src/ui/overlay.ts", "tests/renderer.test.ts", "tests/runtime.test.ts", "tests/pet-command.test.ts", "tests/overlay.test.ts", "tests/turn-status.test.ts"]
-read_before_editing = ["README.md", "docs/pi-sprite-implementation-spec.md"]
+read_before_editing = ["README.md"]
 validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate", "e2e-gate"]
 
 [[components.invariants]]
 id = "slim-passive-companion"
 statement = "The sprite remains a small passive companion and must not grow autonomous personality, pet-sim economy, sound/voice, large dashboards, or process-manager behavior."
-evidence = ["README.md", "docs/pi-sprite-implementation-spec.md", "tests/non-features.test.ts"]
+evidence = ["README.md", "tests/non-features.test.ts"]
 validation_checks = ["unit-tests", "fast-gate"]
 
 [[components.invariants]]
@@ -116,8 +116,8 @@ validation_checks = ["package-smoke", "fast-gate"]
 id = "validation-contract"
 title = "Validation, CI, and HK config"
 kind = "validation"
-paths = [".github/**", ".mise/**", ".harness/**", "package.json", "tests/e2e/**", "docs/pi-sprite-implementation-spec.md", "README.md"]
-read_before_editing = ["README.md", "docs/pi-sprite-implementation-spec.md", ".harness/profiles/pi-sprite-root.toml"]
+paths = [".github/**", ".mise/**", ".harness/**", "package.json", "tests/e2e/**", "docs/**", "README.md"]
+read_before_editing = ["README.md", ".harness/profiles/pi-sprite-root.toml"]
 validation_checks = ["hk-config-validate", "fast-gate", "e2e-gate"]
 
 [[components.invariants]]
