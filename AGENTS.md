@@ -41,6 +41,8 @@ Use focused Node tests while iterating, then run the broad local gate before han
 
 - **DO** route package/discovery changes through `package.json` `files`, `tests/skill.test.ts`, and `tests/e2e/package-smoke.mjs`. **NOT** assume files under `skills/`, `examples/`, or `src/` ship automatically. **BECAUSE** Pi package installs and skill discovery only see what the packed package exposes.
 
+- **DO** keep Ghostty demo captures attached to a live terminal or detach cleanly. **NOT** end a recording by killing a tmux server that a Ghostty tab is attached to. **BECAUSE** even an isolated tmux socket makes the visible Ghostty tab disappear when its server is killed, which is disruptive during demo iteration.
+
 - **DO** pass `/pet import` a fully expanded absolute local folder path. **NOT** use shell-style `~` paths in slash-command arguments. **BECAUSE** Pi slash commands are not shell-expanded, and `/pet import` rejects unresolved paths as not being a local folder.
 
 - **DO** treat pet personality metadata as an optional authoring step after the visual identity is stable. **NOT** force every imported pet to have a personality. **BECAUSE** custom pets can stay purely visual, but a short `personality` field can improve `/btw`/companion flavor when the user wants it.

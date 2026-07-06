@@ -94,6 +94,39 @@ test("create-pet-template script includes optional personality when supplied", a
 	}
 });
 
+test("WendyBot3000 demo source pet is an importable five-state pet", () => {
+	const petDir = "demos/wendybot3000/source-pet";
+	const manifest = JSON.parse(readFileSync(join(petDir, "pet.json"), "utf8"));
+	assert.equal(manifest.id, "wendybot3000");
+	assert.equal(manifest.name, "WendyBot3000");
+	assert.match(manifest.description, /Wendy-inspired/u);
+	for (const state of ["idle", "thinking", "working", "success", "error"]) {
+		assert.equal(manifest.sprites[state], `${state}.png`);
+		assert.equal(existsSync(join(petDir, `${state}.png`)), true);
+	}
+});
+
+test("WendyBot3000 demo pet script writes an importable five-state pet", async () => {
+	const out = mkdtempSync(join(tmpdir(), "pi-sprite-wendy-demo-"));
+	try {
+		const { spawnSync } = await import("node:child_process");
+		const result = spawnSync("node", ["demos/wendybot3000/create-demo-pet.mjs", "--out", out], {
+			encoding: "utf8",
+		});
+		assert.equal(result.status, 0, result.stderr);
+		const manifest = JSON.parse(readFileSync(join(out, "pet.json"), "utf8"));
+		assert.equal(manifest.id, "wendybot3000");
+		assert.equal(manifest.name, "WendyBot3000");
+		assert.match(manifest.personality, /Keep BTW answers short/u);
+		for (const state of ["idle", "thinking", "working", "success", "error"]) {
+			assert.equal(manifest.sprites[state], `${state}.png`);
+			assert.equal(existsSync(join(out, `${state}.png`)), true);
+		}
+	} finally {
+		rmSync(out, { recursive: true, force: true });
+	}
+});
+
 test("Petdex downloader ignores unsafe manifest slugs", async () => {
 	const out = mkdtempSync(join(tmpdir(), "pi-sprite-petdex-"));
 	const outside = join(out, "..", "escape");
