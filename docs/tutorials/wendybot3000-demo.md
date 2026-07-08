@@ -139,6 +139,8 @@ demos/wendybot3000/capture-ghostty-demo.sh
 
 The helper opens a large Ghostty window, prefers a second display when present, records with `screencapture`, and writes ignored local media under `/tmp`. It runs Pi directly, without tmux. It closes stale `pi-sprite ... demo` Ghostty instances, waits until Pi mutates the fixture session, and checks that the expected capture window is still Ghostty's front window before each input, so it fails early instead of typing into your active tab. It does not kill arbitrary Ghostty windows. Use `PI_SPRITE_CAPTURE_DISPLAY=main`, `PI_SPRITE_CAPTURE_SECONDS=40`, or `PI_SPRITE_CAPTURE_X/Y/W/H` to override placement.
 
+For README media, convert from the native Ghostty MP4 rather than the VHS GIF, and validate an extracted GIF frame before committing. The acceptance check is visual and mechanical: the frame should still show the `/context` overlay, the WendyBot3000 sprite, and Pi's bottom footer/status line. If the footer touches the bottom edge, add dark bottom padding during conversion instead of cropping the terminal.
+
 The same script can record another installed pet while keeping the same `/context`, `/btw`, `/recap`, and footer-status scenes:
 
 ```bash
@@ -153,7 +155,7 @@ PI_SPRITE_DEMO_PET_SOURCE="$HOME/.pi/agent/pi-sprite/pets/cap" \
 
 For the 1.0 release, use this demo in three places:
 
-- README: link to the GIF or the demo source.
+- README: embed the optimized `docs/assets/wendybot3000-demo.gif` and link to the hosted docs or demo source.
 - GitHub release notes: include the short GIF or MP4.
 - npm/package gallery: use a hosted image or video if the package listing supports it.
 
