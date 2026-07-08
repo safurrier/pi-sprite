@@ -31,3 +31,4 @@ index:
 
 - [Pet Manifest Reference](reference/pet-manifest.md) — `pet.json` fields, sprite states, frame strips, and personality metadata
 - [Rendering Modes Reference](reference/rendering-modes.md) — ANSI fallback, direct native images, and Kitty placeholder rendering
+- [Release Checklist](reference/release.md) — npm publish preflight, trusted publishing, and post-publish Pi smoke checks

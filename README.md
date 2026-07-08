@@ -313,6 +313,8 @@ Run the full verification path, including e2e smoke helpers:
 mise run verify
 ```
 
+Release publishing uses the hosted [Release Checklist](https://safurrier.github.io/pi-sprite/reference/release/).
+
 Equivalent npm commands:
 
 ```bash

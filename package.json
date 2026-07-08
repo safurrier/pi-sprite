@@ -1,6 +1,6 @@
 {
 	"name": "pi-sprite",
-	"version": "0.1.0",
+	"version": "1.0.0",
 	"description": "A slim Codex-style sprite companion for Pi with /context, /recap, and /btw.",
 	"keywords": [
 		"pi-package",
@@ -29,7 +29,8 @@
 		],
 		"skills": [
 			"./skills"
-		]
+		],
+		"image": "https://safurrier.github.io/pi-sprite/assets/wendybot3000-demo.gif"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-ai": "*",
@@ -51,6 +52,10 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.16",
+		"@earendil-works/pi-ai": "^0.80.3",
+		"@earendil-works/pi-coding-agent": "^0.80.3",
+		"@earendil-works/pi-tui": "^0.80.3",
+		"@types/adm-zip": "^0.5.8",
 		"@types/node": "^22.0.0",
 		"tsx": "^4.22.3",
 		"typescript": "^5.9.0"
@@ -66,8 +71,6 @@
 		"CHANGELOG.md"
 	],
 	"dependencies": {
-		"@earendil-works/pi-tui": "*",
-		"@types/adm-zip": "^0.5.8",
 		"adm-zip": "^0.5.17",
 		"sharp": "^0.33.5"
 	}

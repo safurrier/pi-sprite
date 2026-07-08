@@ -61,3 +61,4 @@ nav:
       - Configuration: reference/configuration.md
       - Pet Manifest: reference/pet-manifest.md
       - Rendering Modes: reference/rendering-modes.md
+      - Release Checklist: reference/release.md
