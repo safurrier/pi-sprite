@@ -1,4 +1,4 @@
-import type { Message } from "@earendil-works/pi-ai";
+import type { Message, TextContent } from "@earendil-works/pi-ai/compat";
 import type { ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { SideCompletionRequest, SideCompletionResult } from "./side-session-types.ts";
 
@@ -39,14 +39,14 @@ export async function completeWithApiKeyText(
 	if (!auth.ok || !auth.apiKey) return { ok: false, message: auth.ok ? "No API key available." : auth.error };
 	const request = async () => {
 		const messages: Message[] = [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }];
-		const { complete } = await import("@earendil-works/pi-ai");
+		const { complete } = await import("@earendil-works/pi-ai/compat");
 		const response = await complete(
 			cappedModel(ctx.model!, options.maxTokens),
 			{ systemPrompt: options.systemPrompt, messages },
 			{ apiKey: auth.apiKey, headers: auth.headers, maxTokens: options.maxTokens },
 		);
 		return response.content
-			.filter((part): part is { type: "text"; text: string } => part.type === "text")
+			.filter((part): part is TextContent => part.type === "text")
 			.map((part) => part.text)
 			.join("\n")
 			.trim();

@@ -29,6 +29,7 @@ index:
 | Record a first-release demo | [WendyBot3000 demo](tutorials/wendybot3000-demo.md) |
 | Hand-edit `pet.json` | [Pet manifest reference](reference/pet-manifest.md) |
 | Debug terminal image behavior | [Rendering modes reference](reference/rendering-modes.md) |
+| Prepare an npm release | [Release checklist](reference/release.md) |
 | Generate a recap into the side thread | [Architecture](explanation/architecture.md) |
 
 ## Understand the System

@@ -22,5 +22,6 @@
 | [`reference/configuration.md`](reference/configuration.md) | Sprite home, pet folders, selected-pet state, environment overrides, and default-pet setup |
 | [`reference/pet-manifest.md`](reference/pet-manifest.md) | `pet.json` schema, supported sprite states, frame strips, and personality metadata |
 | [`reference/rendering-modes.md`](reference/rendering-modes.md) | Terminal rendering modes and when to use ANSI fallback or native placeholders |
+| [`reference/release.md`](reference/release.md) | npm release preflight, trusted publishing, and post-publish Pi smoke checks |
 
 <!-- generated-by: context-engineering@2.2.0 | last-updated: 2026-07-06 -->
