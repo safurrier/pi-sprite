@@ -22,7 +22,7 @@ For a text-only walkthrough of the pet and commands:
 bash demos/wendybot3000/demo.sh
 ```
 
-The generated GIF is intentionally not required for tests. Keep the tape, fixture, source pet, and helper scripts as the reviewable source of truth.
+The generated demo media is intentionally not required for tests. Keep the tape, fixture, source pet, and helper scripts as the reviewable source of truth. If you commit an optimized README GIF under `docs/assets/`, validate a representative frame so Pi's bottom footer/status line is not cropped.
 
 For native image media, record from a Ghostty/Kitty/WezTerm window instead of VHS. The demo tmux session hides tmux's own status bar so Pi's footer is the bottom status line.
 

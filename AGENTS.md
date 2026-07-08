@@ -49,6 +49,9 @@ Use focused Node tests while iterating, then run the broad local gate before han
 
 - **DO** keep HK profile command contracts in `.harness/profiles/pi-sprite-root.toml` and component/invariant routing in `.harness/system.toml`. **NOT** duplicate requiredness or review policy into the system map. **BECAUSE** HK profiles own validation semantics; the system map is advisory context for agents.
 
+<!-- source: session-history | session: 2026-07-08-readme-onboarding-demo-fix | extracted: 2026-07-08 -->
+- **DO** make release README quickstarts cover the real first user journey: install from GitHub before npm exists, install from npm after release, add/select an existing pet, and import or author a custom pet. **NOT** leave README as only a feature list or link farm to deeper docs. **BECAUSE** new users need a first useful sprite in Pi before they know which tutorial or skill to read next.
+
 ## Related Context
 
 | Path | What's there |

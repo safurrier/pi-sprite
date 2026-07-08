@@ -20,7 +20,7 @@ index:
 ## Author and Configure Sprites
 
 - [Sprite Authoring Guide](tutorials/authoring-sprites.md) — use `/pet create` to create a stable importable pet from references or generated art
-- [WendyBot3000 Demo](tutorials/wendybot3000-demo.md) — deterministic release-demo pet, VHS source, and live Pi command sequence
+- [WendyBot3000 Demo](tutorials/wendybot3000-demo.md) — deterministic release-demo pet, Ghostty/VHS capture source, README GIF checks, and live Pi command sequence
 - [Configuration Reference](reference/configuration.md) — sprite state, pet folders, default pet selection, and environment overrides
 
 ## Understand the System

@@ -8,33 +8,62 @@ It is intentionally not a pet simulator or desktop companion. The sprite is ther
 
 The demo shows real Pi slash commands: importing a pet, opening `/context`, asking `/btw`, running `/recap`, and watching the bottom footer status update.
 
-## Quick start from this checkout
+## Quick start
 
-Run Pi with the local extension while developing:
+Install from GitHub today:
+
+```bash
+pi install git:github.com/safurrier/pi-sprite@main
+pi
+```
+
+After the npm release, the install path becomes:
+
+```bash
+pi install npm:pi-sprite
+pi
+```
+
+If you are developing from a checkout, run the local package without installing it:
 
 ```bash
 cd /path/to/pi-sprite
 pi -e .
 ```
 
-In Pi, check the sprite and available pets:
+Once Pi opens, get to a useful first sprite:
 
 ```text
-/pet
-/pet list
+/pet status
+/pet gallery
+/pet preview <id-from-gallery>
+/pet install <id-from-gallery>
+/context
+/btw what should I look at next?
 ```
+
+`/pet install` selects the installed Petdex sprite automatically. If you already imported pets, use `/pet list` and `/pet choose <id>` instead.
+
+If you already have a local pet folder, import it with an absolute path:
+
+```text
+/pet import /absolute/path/to/my-pet
+/pet choose my-pet
+```
+
+To author a new sprite with agent help, start the guided workflow:
+
+```text
+/pet create tiny desk cat with cozy pixel-art vibes
+```
+
+For deeper custom-pet guidance, read the hosted [Sprite Authoring Guide](https://safurrier.github.io/pi-sprite/tutorials/authoring-sprites/).
 
 If native images ever get stuck after changing renderers or restarting tmux, clean the terminal image layer and redraw:
 
 ```text
 /pet clear-native
 /pet show
-```
-
-For a git install after this branch is stable:
-
-```bash
-pi install git:github.com/safurrier/pi-sprite
 ```
 
 ## What you get
@@ -200,7 +229,7 @@ node skills/pi-sprite-authoring/scripts/create-pet-template.mjs \
 Third-party reference sprites should stay local unless their licenses are verified. This helper downloads Petdex examples into a gitignored folder with provenance notes:
 
 ```bash
-node skills/pi-sprite-authoring/scripts/download-petdex-examples.mjs --limit 12 --out examples/petdex-downloads
+node skills/pi-sprite-authoring/scripts/download-petdex-examples.mjs --limit 12 --out /tmp/petdex-downloads
 ```
 
 For the full workflow, read the hosted [Sprite Authoring Guide](https://safurrier.github.io/pi-sprite/tutorials/authoring-sprites/). For a deterministic release-demo pet, see the [WendyBot3000 demo guide](https://safurrier.github.io/pi-sprite/tutorials/wendybot3000-demo/) and the repo-only [demo source](https://github.com/safurrier/pi-sprite/tree/main/demos/wendybot3000).
@@ -252,19 +281,17 @@ Answers appear in an interactive speech bubble that points toward the sprite. No
 
 ## Documentation
 
-Durable docs live under `docs/` and are published with MkDocs Material through GitHub Pages.
-
-Build the docs locally:
-
-```bash
-uvx --with mkdocs-material mkdocs build --strict
-```
-
-Start with:
+Start with the hosted docs; these links work from GitHub, npm, and installed package readers:
 
 - [Docs home](https://safurrier.github.io/pi-sprite/) for the user and contributor index
 - [Sprite Authoring Guide](https://safurrier.github.io/pi-sprite/tutorials/authoring-sprites/) for custom pet authoring
 - [Configuration Reference](https://safurrier.github.io/pi-sprite/reference/configuration/) for default pet state and sprite home setup
+
+From a source checkout, durable docs live under `docs/` and are published with MkDocs Material through GitHub Pages. Build them locally with:
+
+```bash
+uvx --with mkdocs-material mkdocs build --strict
+```
 
 ## Development
 

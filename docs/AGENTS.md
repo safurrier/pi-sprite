@@ -5,7 +5,7 @@
 | Doc | Topic |
 |---|---|
 | [`tutorials/authoring-sprites.md`](tutorials/authoring-sprites.md) | Use `/pet create` or `/sprite create` to start guided custom pet authoring with stable state images and optional personality metadata |
-| [`tutorials/wendybot3000-demo.md`](tutorials/wendybot3000-demo.md) | Deterministic WendyBot3000 release-demo pet, VHS source, and live Pi command sequence |
+| [`tutorials/wendybot3000-demo.md`](tutorials/wendybot3000-demo.md) | Deterministic WendyBot3000 release-demo pet, Ghostty/VHS capture source, README GIF checks, and live Pi command sequence |
 
 ## Explanation
 
