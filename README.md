@@ -4,6 +4,10 @@
 
 It is intentionally not a pet simulator or desktop companion. The sprite is there to make agent state easier to read without adding another dashboard.
 
+![pi-sprite WendyBot3000 demo](https://safurrier.github.io/pi-sprite/assets/wendybot3000-demo.gif)
+
+The demo shows real Pi slash commands: importing a pet, opening `/context`, asking `/btw`, running `/recap`, and watching the bottom footer status update.
+
 ## Quick start from this checkout
 
 Run Pi with the local extension while developing:
@@ -166,7 +170,16 @@ You can also invoke the skill directly:
 /skill:pi-sprite-authoring
 ```
 
-The skill walks through reference gathering, a canonical idle-frame anchor, state-frame review, optional personality metadata for explicit `/btw` replies, and final import validation. It is the recommended path for making polished custom sprites instead of hand-assembling `pet.json` from scratch.
+The recommended authoring loop is:
+
+1. Write a short character brief and gather any local references.
+2. Pick a direction card before generating images.
+3. Create or choose one canonical `idle` image as the identity anchor.
+4. Generate `thinking`, `working`, `success`, and `error` from that anchor.
+5. Review all states for shared silhouette, face, palette, outline, canvas size, and scale.
+6. Add optional simple motion strips only after the static states work.
+7. Add bounded BTW-only `personality` metadata if the pet should affect explicit side replies.
+8. Import the expanded folder with `/pet import <path>`.
 
 Create a starter folder:
 
@@ -189,6 +202,8 @@ Third-party reference sprites should stay local unless their licenses are verifi
 ```bash
 node skills/pi-sprite-authoring/scripts/download-petdex-examples.mjs --limit 12 --out examples/petdex-downloads
 ```
+
+For the full workflow, read the hosted [Sprite Authoring Guide](https://safurrier.github.io/pi-sprite/tutorials/authoring-sprites/). For a deterministic release-demo pet, see the [WendyBot3000 demo guide](https://safurrier.github.io/pi-sprite/tutorials/wendybot3000-demo/) and the repo-only [demo source](https://github.com/safurrier/pi-sprite/tree/main/demos/wendybot3000).
 
 ## `/context`
 
@@ -247,9 +262,9 @@ uvx --with mkdocs-material mkdocs build --strict
 
 Start with:
 
-- `docs/index.md` for the docs landing page
-- `docs/tutorials/authoring-sprites.md` for custom pet authoring
-- `docs/reference/configuration.md` for default pet state and sprite home setup
+- [Docs home](https://safurrier.github.io/pi-sprite/) for the user and contributor index
+- [Sprite Authoring Guide](https://safurrier.github.io/pi-sprite/tutorials/authoring-sprites/) for custom pet authoring
+- [Configuration Reference](https://safurrier.github.io/pi-sprite/reference/configuration/) for default pet state and sprite home setup
 
 ## Development
 

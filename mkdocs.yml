@@ -52,7 +52,9 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Sprite Authoring: tutorials/authoring-sprites.md
+  - Sprite Authoring:
+      - Authoring Guide: tutorials/authoring-sprites.md
+      - WendyBot3000 Demo: tutorials/wendybot3000-demo.md
   - Explanation:
       - Architecture: explanation/architecture.md
   - Reference:

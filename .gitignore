@@ -11,5 +11,8 @@ artifacts/e2e/*
 test-results/*
 !test-results/.gitkeep
 site/
+demos/**/*.gif
+demos/**/*.mp4
+demos/**/*.mov
 examples/petdex-downloads/*
 !examples/petdex-downloads/.gitkeep

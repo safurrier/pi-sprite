@@ -5,6 +5,7 @@
 | Doc | Topic |
 |---|---|
 | [`tutorials/authoring-sprites.md`](tutorials/authoring-sprites.md) | Use `/pet create` or `/sprite create` to start guided custom pet authoring with stable state images and optional personality metadata |
+| [`tutorials/wendybot3000-demo.md`](tutorials/wendybot3000-demo.md) | Deterministic WendyBot3000 release-demo pet, VHS source, and live Pi command sequence |
 
 ## Explanation
 
@@ -22,4 +23,4 @@
 | [`reference/pet-manifest.md`](reference/pet-manifest.md) | `pet.json` schema, supported sprite states, frame strips, and personality metadata |
 | [`reference/rendering-modes.md`](reference/rendering-modes.md) | Terminal rendering modes and when to use ANSI fallback or native placeholders |
 
-<!-- generated-by: context-engineering@2.2.0 | last-updated: 2026-07-02 -->
+<!-- generated-by: context-engineering@2.2.0 | last-updated: 2026-07-06 -->
