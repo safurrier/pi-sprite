@@ -43,11 +43,18 @@ test("replyable speech bubble submits follow-up and updates in place", async () 
 			tail: "bottom-right",
 			maxBodyLines: 8,
 			requestRender: () => renderRequests++,
-			onSubmit: async (text) => [
-				{ title: "Wumpus", body: "First answer" },
-				{ title: "You · 2", body: text, accent: "muted" },
-				{ title: "Wumpus", body: "Second answer" },
-			],
+			onSubmit: async (text, update) => {
+				update([
+					{ title: "Wumpus", body: "First answer" },
+					{ title: "Wumpus", body: "Thinking stream", accent: "muted" },
+				]);
+				assert.match(component.render(80).join("\n"), /Thinking stream/u);
+				return [
+					{ title: "Wumpus", body: "First answer" },
+					{ title: "You · 2", body: text, accent: "muted" },
+					{ title: "Wumpus", body: "Second answer" },
+				];
+			},
 		},
 	);
 
@@ -62,6 +69,70 @@ test("replyable speech bubble submits follow-up and updates in place", async () 
 	assert.match(rendered, /juke dog/u);
 	assert.match(rendered, /Second answer/u);
 	assert.ok(renderRequests >= 2);
+});
+
+test("replyable speech bubble auto-submits initial text, streams, and completes", async () => {
+	let resolveSubmission: ((sections: Array<{ title: string; body: string; accent?: "muted" }>) => void) | undefined;
+	const component = createReplyableSpeechBubble(
+		"Wumpus side thread",
+		[{ title: "Side thread · empty", body: "Start a conversation." }],
+		theme,
+		() => {},
+		{
+			tail: "bottom-right",
+			maxBodyLines: 8,
+			initialSubmittedText: "inspect the stream",
+			onSubmit: async (text, update) => {
+				assert.equal(text, "inspect the stream");
+				update([{ title: "Wumpus", body: "Thinking through it", accent: "muted" }]);
+				return await new Promise((resolve) => {
+					resolveSubmission = resolve;
+				});
+			},
+		},
+	);
+
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	assert.match(component.render(80).join("\n"), /Thinking through it/u);
+	resolveSubmission?.([
+		{ title: "You · 1", body: "inspect the stream", accent: "muted" },
+		{ title: "Wumpus", body: "Completed turn" },
+	]);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	const rendered = component.render(80).join("\n");
+	assert.match(rendered, /inspect the stream/u);
+	assert.match(rendered, /Completed turn/u);
+});
+
+test("Escape cancels a held initial reply before closing the bubble", async () => {
+	let cancelled = 0;
+	let closed = 0;
+	let rejectSubmission: ((error: Error) => void) | undefined;
+	const component = createReplyableSpeechBubble(
+		"Wumpus side thread",
+		[{ title: "Side thread · empty", body: "Start a conversation." }],
+		theme,
+		() => closed++,
+		{
+			initialSubmittedText: "held initial question",
+			onDismiss: () => {
+				cancelled++;
+				rejectSubmission?.(new Error("BTW request was cancelled."));
+			},
+			onSubmit: async () =>
+				await new Promise((_, reject) => {
+					rejectSubmission = reject;
+				}),
+		},
+	);
+
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	assert.match(component.render(80).join("\n"), /Thinking/u);
+	component.handleInput?.("\u001b");
+	assert.equal(cancelled, 1);
+	assert.equal(closed, 1);
+	await new Promise((resolve) => setTimeout(resolve, 0));
+	assert.doesNotMatch(component.render(80).join("\n"), /Thinking/u);
 });
 
 test("replyable speech bubble ignores unmatched escape control sequences", () => {

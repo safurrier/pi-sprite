@@ -1,7 +1,8 @@
 export function formatBtwAnswerPrompt(options: {
 	question: string;
 	persist: boolean;
-	mainContext: string;
+	/** Legacy caller fields are deliberately ignored: transcript lives in AgentSession. */
+	mainContext?: string;
 	threadText?: string;
 	spriteName?: string;
 	personality?: string;
@@ -24,11 +25,7 @@ export function formatBtwAnswerPrompt(options: {
 			: "You are answering a one-off side question for a Pi coding session. Do not assume this answer will continue the current BTW thread.",
 		"Be concise and practical.",
 		...personalityBlock,
-		"",
-		"Main-session context:",
-		options.mainContext || "(No main context available.)",
-		"",
-		options.threadText ? `Existing BTW thread:\n${options.threadText}` : "Existing BTW thread: (not included)",
+		"The side-session transcript already contains any contextual history. Do not ask the user to repeat it.",
 		"",
 		`Side question: ${options.question}`,
 	].join("\n");

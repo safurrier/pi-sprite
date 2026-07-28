@@ -42,8 +42,13 @@ export interface SpeechBubbleOptions {
 }
 
 export interface ReplyableSpeechBubbleOptions extends SpeechBubbleOptions {
+	/** Submit this text as soon as the constructed bubble is shown. */
+	initialSubmittedText?: string;
 	requestRender?: () => void;
-	onSubmit: (text: string) => Promise<OverlaySection[]>;
+	/** Called when Escape closes a busy bubble, so its active work can be cancelled. */
+	onDismiss?: () => void | Promise<void>;
+	/** Update the bubble while a submitted side-session response streams. */
+	onSubmit: (text: string, update: (sections: OverlaySection[]) => void) => Promise<OverlaySection[]>;
 }
 
 interface RenderedSpeechBubble {
@@ -240,7 +245,10 @@ export function createReplyableSpeechBubble(
 		scrollToBottom = true;
 		refresh();
 		try {
-			sections = await options.onSubmit(text);
+			sections = await options.onSubmit(text, (nextSections) => {
+				sections = nextSections;
+				refresh();
+			});
 		} catch (err) {
 			error = err instanceof Error ? err.message : "Reply failed.";
 		} finally {
@@ -249,7 +257,7 @@ export function createReplyableSpeechBubble(
 			refresh();
 		}
 	};
-	return {
+	const component: Component = {
 		render: (width: number) => {
 			const displaySections = [...sections];
 			if (busy)
@@ -275,6 +283,10 @@ export function createReplyableSpeechBubble(
 		invalidate: () => {},
 		handleInput: (data: string) => {
 			if (matchesKey(data, "escape")) {
+				if (busy)
+					void Promise.resolve(options.onDismiss?.()).catch(() => {
+						// The overlay must still close if cancellation itself fails.
+					});
 				done(undefined);
 				return;
 			}
@@ -305,4 +317,12 @@ export function createReplyableSpeechBubble(
 			refresh();
 		},
 	};
+	const initialText = options.initialSubmittedText?.trim();
+	if (initialText) {
+		queueMicrotask(() => {
+			draft = initialText;
+			void submit();
+		});
+	}
+	return component;
 }

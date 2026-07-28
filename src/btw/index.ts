@@ -1,5 +1,4 @@
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { completeWithApiKeyText } from "../agent/side-completion.ts";
 import { completeWithSideSession } from "../agent/side-session.ts";
 import { completeRecapWithApiKey } from "../recap/direct.ts";
 import { generateRecapText } from "../recap/generation.ts";
@@ -10,11 +9,11 @@ import {
 	type OverlaySection,
 	type SpriteBubblePlacement,
 } from "../ui/overlay.ts";
-import { type BtwCompletionAdapters, completeBtwText } from "./completion.ts";
+
 import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
 import { formatBtwAnswerPrompt } from "./prompt.ts";
 import { recapIntoBtw as addRecapToBtw, type BtwRecapAdapters } from "./recap.ts";
-import { answerWithSideSession, summarizeWithSideSession } from "./session.ts";
+import { BtwAgentSession, type BtwStreamUpdate } from "./session.ts";
 import { appendBtwEntry, appendBtwReset, restoreBtwThreadFromBranch } from "./thread-store.ts";
 
 type ActivityStatus = "idle" | "running" | "ready" | "error";
@@ -29,41 +28,7 @@ interface BtwHooks {
 }
 
 let thread: BtwEntry[] = [];
-
-async function directCompletion(
-	ctx: ExtensionCommandContext,
-	prompt: string,
-	maxTokens: number,
-): Promise<string | undefined> {
-	const result = await completeWithApiKeyText(ctx, prompt, { maxTokens });
-	return result.ok ? result.text : undefined;
-}
-
-const defaultCompletionAdapters: BtwCompletionAdapters = {
-	sideSession: async (ctx, prompt, maxTokens) => await answerWithSideSession(ctx, prompt, { maxTokens }),
-	direct: directCompletion,
-};
-
-function restore(ctx: ExtensionContext): void {
-	thread = restoreBtwThreadFromBranch(ctx.sessionManager.getBranch() as Iterable<unknown>);
-}
-function visibleContext(ctx: ExtensionCommandContext): string {
-	const lines: string[] = [];
-	for (const entry of ctx.sessionManager.getBranch() as Iterable<any>) {
-		if (entry.type !== "message") continue;
-		const role = entry.message?.role;
-		if (role !== "user" && role !== "assistant") continue;
-		const content = entry.message.content;
-		const text =
-			typeof content === "string"
-				? content
-				: Array.isArray(content)
-					? content.map((p) => (p?.type === "text" ? p.text : "")).join("\n")
-					: "";
-		if (text.trim()) lines.push(`${role}: ${text.trim().slice(0, 1000)}`);
-	}
-	return lines.slice(-10).join("\n\n");
-}
+let btwSession = new BtwAgentSession();
 
 async function showBtw(
 	ctx: ExtensionCommandContext,
@@ -94,28 +59,51 @@ async function showBtw(
 		},
 	);
 }
-async function showInteractiveBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, hooks: BtwHooks = {}): Promise<void> {
+async function showInteractiveBtw(
+	pi: ExtensionAPI,
+	ctx: ExtensionCommandContext,
+	hooks: BtwHooks = {},
+	initialQuestion?: string,
+): Promise<boolean> {
 	const speakerName = hooks.getSpriteName?.() ?? "Sprite";
 	const placement = hooks.getBubblePlacement?.() ?? { anchor: "center", tail: "none", margin: {} };
+	let constructed = false;
 	await ctx.ui.custom(
-		(tui, theme, _kb, done) =>
-			createReplyableSpeechBubble(
+		(tui, theme, _kb, done) => {
+			constructed = true;
+			return createReplyableSpeechBubble(
 				`${speakerName} side thread`,
 				formatThreadSections(thread, speakerName),
 				theme,
 				done,
 				{
+					initialSubmittedText: initialQuestion,
 					tail: placement.tail,
 					maxBodyLines: 12,
 					minWidth: 56,
 					maxWidth: 104,
 					requestRender: () => tui.requestRender(),
-					onSubmit: async (text) => {
-						await askSideQuestion(pi, text, ctx, hooks, { showBubble: false });
+					onDismiss: async () => {
+						const activeBtwSession = btwSession;
+						if (activeBtwSession.isRunning) await activeBtwSession.cancel();
+					},
+					onSubmit: async (text, update) => {
+						const activity: OverlaySection[] = [];
+						await askSideQuestion(pi, text, ctx, hooks, {
+							showBubble: false,
+							onUpdate: (stream) => {
+								const title = stream.kind === "tool" ? "Tool activity" : speakerName;
+								const previous = activity.at(-1);
+								if (previous?.title === title) previous.body = stream.text;
+								else activity.push({ title, body: stream.text, accent: "muted" });
+								update([...formatThreadSections(thread, speakerName), ...activity]);
+							},
+						});
 						return formatThreadSections(thread, speakerName);
 					},
 				},
-			),
+			);
+		},
 		{
 			overlay: true,
 			overlayOptions: {
@@ -127,6 +115,7 @@ async function showInteractiveBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext
 			},
 		},
 	);
+	return constructed;
 }
 
 async function askSideQuestion(
@@ -134,10 +123,13 @@ async function askSideQuestion(
 	question: string,
 	ctx: ExtensionCommandContext,
 	hooks: BtwHooks = {},
-	options: { persist?: boolean; includeThread?: boolean; showBubble?: boolean } = {},
+	options: {
+		persist?: boolean;
+		showBubble?: boolean;
+		onUpdate?: (update: BtwStreamUpdate) => void;
+	} = {},
 ): Promise<void> {
 	const persist = options.persist ?? true;
-	const includeThread = options.includeThread ?? persist;
 	const showBubble = options.showBubble ?? true;
 	if (!ctx.model) {
 		const message = "No active model selected for /btw.";
@@ -147,15 +139,19 @@ async function askSideQuestion(
 	const prompt = formatBtwAnswerPrompt({
 		question,
 		persist,
-		mainContext: visibleContext(ctx),
-		threadText: includeThread && thread.length ? formatThread(thread) : undefined,
 		spriteName: hooks.getSpriteName?.(),
 		personality: hooks.getSpritePersonality?.(),
 	});
 	hooks.setState?.("thinking");
 	hooks.setBtwStatus?.("running", thread.length);
 	try {
-		const answer = await completeBtwText(ctx, prompt, 1200, defaultCompletionAdapters);
+		const activeBtwSession = btwSession;
+		const answer = await activeBtwSession.ask(ctx, prompt, {
+			seedFromMainBranch: persist,
+			thinkingLevel: pi.getThinkingLevel(),
+			onUpdate: options.onUpdate,
+		});
+		if (activeBtwSession !== btwSession) throw new Error("BTW request was cancelled by a session change.");
 		if (!answer) {
 			const message = "BTW response returned no text.";
 			hooks.setState?.("error", { resetMs: 2500 });
@@ -190,14 +186,20 @@ async function askSideQuestion(
 	} catch (error) {
 		hooks.setState?.("error", { resetMs: 2500 });
 		hooks.setBtwStatus?.("error", thread.length);
-		throw error;
+		if (!showBubble) throw error;
+		const message = error instanceof Error ? error.message : "BTW session failed.";
+		ctx.ui.notify(`BTW failed: ${message}`, "warning");
 	}
 }
-async function summarizeThread(ctx: ExtensionCommandContext): Promise<string> {
+async function summarizeThread(pi: ExtensionAPI, ctx: ExtensionCommandContext): Promise<string> {
 	if (!ctx.model) throw new Error("No active model selected.");
 	const prompt = `Summarize this side thread for injection into a coding-agent main session. Preserve decisions, risks, and next actions.\n\n${formatThread(thread)}`;
-	const summary = (await summarizeWithSideSession(ctx, prompt)) || (await directCompletion(ctx, prompt, 700));
-	if (!summary) throw new Error("BTW summary returned no text.");
+	const activeBtwSession = btwSession;
+	const summary = await activeBtwSession.ask(ctx, prompt, {
+		seedFromMainBranch: true,
+		thinkingLevel: pi.getThinkingLevel(),
+	});
+	if (activeBtwSession !== btwSession) throw new Error("BTW summary was cancelled by a session change.");
 	return summary;
 }
 function sendToMain(pi: ExtensionAPI, ctx: ExtensionCommandContext, content: string): void {
@@ -213,26 +215,50 @@ const defaultBtwRecapAdapters: BtwRecapAdapters = {
 		}),
 };
 
+async function replaceBtwSession(entries: BtwEntry[] = thread): Promise<void> {
+	const previous = btwSession;
+	btwSession = new BtwAgentSession(undefined, entries);
+	await previous.dispose();
+}
+
+async function clearBtwSession(pi: ExtensionAPI): Promise<void> {
+	thread = [];
+	appendBtwReset(pi);
+	await replaceBtwSession();
+}
+
 async function recapIntoBtw(pi: ExtensionAPI, ctx: ExtensionCommandContext, hooks: BtwHooks = {}): Promise<void> {
 	await addRecapToBtw(pi, ctx, thread, hooks, defaultBtwRecapAdapters, {
-		afterSuccess: async () => showInteractiveBtw(pi, ctx, hooks),
+		afterSuccess: async () => {
+			// The recap was generated outside this AgentSession; reseed it so the next
+			// BTW follow-up can see the newly visible exchange.
+			await replaceBtwSession(thread);
+			await showInteractiveBtw(pi, ctx, hooks);
+		},
 	});
 }
 
 export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
-	const restoreAndReport = (ctx: ExtensionContext) => {
-		restore(ctx);
+	const restoreAndReport = async (ctx: ExtensionContext) => {
+		// Side-session history is intentionally branch-local and in-memory. Its
+		// visible transcript is restored from hidden entries below.
+		thread = restoreBtwThreadFromBranch(ctx.sessionManager.getBranch() as Iterable<unknown>);
+		await replaceBtwSession(thread);
 		hooks.setBtwStatus?.(thread.length ? "ready" : "idle", thread.length);
 	};
-	pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => restoreAndReport(ctx));
-	pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => restoreAndReport(ctx));
+	pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => await restoreAndReport(ctx));
+	pi.on("session_tree", async (_event: unknown, ctx: ExtensionContext) => await restoreAndReport(ctx));
+	pi.on("session_shutdown", async () => await btwSession.dispose());
 	pi.registerCommand("btw", {
 		description: "Continue the BTW side conversation outside the main thread; use /btw recap for a recap thread",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const question = args.trim();
-			if (!question) return showInteractiveBtw(pi, ctx, hooks);
+			if (!question) {
+				await showInteractiveBtw(pi, ctx, hooks);
+				return;
+			}
 			if (question === "recap") return recapIntoBtw(pi, ctx, hooks);
-			await askSideQuestion(pi, question, ctx, hooks);
+			if (!(await showInteractiveBtw(pi, ctx, hooks, question))) await askSideQuestion(pi, question, ctx, hooks);
 		},
 	});
 	pi.registerCommand("btw:ask", {
@@ -240,17 +266,18 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
 			const question = args.trim();
 			if (!question) return ctx.ui.notify("Usage: /btw:ask <question>", "warning");
-			await askSideQuestion(pi, question, ctx, hooks, { persist: false, includeThread: false });
+			await askSideQuestion(pi, question, ctx, hooks, { persist: false });
 		},
 	});
 	pi.registerCommand("btw:new", {
 		description: "Start a fresh BTW thread",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
-			thread = [];
-			appendBtwReset(pi);
+			await clearBtwSession(pi);
 			hooks.setBtwStatus?.("idle", 0);
-			if (args.trim()) await askSideQuestion(pi, args.trim(), ctx, hooks);
-			else await showInteractiveBtw(pi, ctx, hooks);
+			const question = args.trim();
+			if (question) {
+				if (!(await showInteractiveBtw(pi, ctx, hooks, question))) await askSideQuestion(pi, question, ctx, hooks);
+			} else await showInteractiveBtw(pi, ctx, hooks);
 		},
 	});
 	pi.registerCommand("btw:recap", {
@@ -262,8 +289,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 	pi.registerCommand("btw:clear", {
 		description: "Clear the BTW thread",
 		handler: async (_args: string, ctx: ExtensionCommandContext) => {
-			thread = [];
-			appendBtwReset(pi);
+			await clearBtwSession(pi);
 			hooks.setBtwStatus?.("idle", 0);
 			ctx.ui.notify("Cleared BTW thread.", "info");
 		},
@@ -277,8 +303,7 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 				ctx,
 				`${args.trim() ? `${args.trim()}\n\n` : ""}Here is a side-thread transcript for context:\n\n${formatThread(thread)}`,
 			);
-			thread = [];
-			appendBtwReset(pi);
+			await clearBtwSession(pi);
 			hooks.setBtwStatus?.("idle", 0);
 		},
 	});
@@ -288,14 +313,13 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 			if (!thread.length) return ctx.ui.notify("No BTW thread to summarize.", "warning");
 			hooks.setBtwStatus?.("running", thread.length);
 			try {
-				const summary = await summarizeThread(ctx);
+				const summary = await summarizeThread(pi, ctx);
 				sendToMain(
 					pi,
 					ctx,
 					`${args.trim() ? `${args.trim()}\n\n` : ""}Here is a summary of a side conversation:\n\n${summary}`,
 				);
-				thread = [];
-				appendBtwReset(pi);
+				await clearBtwSession(pi);
 				hooks.setBtwStatus?.("idle", 0);
 			} catch (error) {
 				hooks.setBtwStatus?.("error", thread.length);

@@ -47,7 +47,7 @@ The extension entrypoint is `extensions/index.ts`. It creates the sprite runtime
 
 ## Side Sessions
 
-`/recap`, `/btw`, and `/btw:recap` model work runs through isolated Pi side sessions first. The shared helper in `src/agent/side-session.ts` creates an in-memory session with no tools and a safety prompt, then disposes it after the response.
+`/recap` retains the isolated no-tools helper in `src/agent/side-session.ts`: it creates an in-memory session with a safety prompt and disposes it after the response. BTW is deliberately different. `src/btw/session.ts` owns a persistent in-memory Pi SDK `AgentSession` seeded with `buildSessionContext()` from the exact active main branch on its first contextual request. It keeps its own transcript, active model/provider, thinking level, cwd, and `read`/`bash`/`edit`/`write` tools without replacing the active Pi runtime. Stream updates feed the existing BTW bubble while main work can continue. The shared cwd means concurrent file mutation is possible; the BTW system prompt requires an explicit user request before mutation and explicit reporting afterward. Clear/new, branch changes, and shutdown cancel/dispose the runtime. The approach is adapted from [dbachelder/pi-btw](https://github.com/dbachelder/pi-btw).
 
 ```mermaid
 flowchart LR

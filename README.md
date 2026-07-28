@@ -275,9 +275,11 @@ Recap generation first uses an isolated, no-tools Pi side session with the curre
 /btw:summarize
 ```
 
-`/btw` is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups and `/btw` to reopen the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread. Use `/btw:recap` or `/btw recap` to generate the normal session recap inside the BTW thread.
+`/btw` is a continuing side conversation outside the main thread. On its first contextual question, it creates a persistent in-memory Pi SDK agent session seeded from the active main-session branch. Follow-ups continue in that isolated transcript; `/btw:ask` is contextless and does not seed or append to the visible side thread. Use `/btw:recap` or `/btw recap` to generate the normal session recap inside the BTW thread.
 
-Answers appear in an interactive speech bubble that points toward the sprite. Nothing is injected back into the main conversation unless you explicitly run `/btw:inject` or `/btw:summarize`.
+BTW uses the active model/provider, thinking level, cwd, and normal `read`, `bash`, `edit`, and `write` tools. Its speech bubble streams thinking, tool activity, and assistant text while the main agent can keep working. Both agents share the cwd: a BTW file mutation can race a main-agent mutation, so BTW is instructed to mutate only on an explicit request and to say what it changed.
+
+Nothing is injected back into the main conversation unless you explicitly run `/btw:inject` or `/btw:summarize`. `/btw:new`, `/btw:clear`, branch/session changes, and shutdown cancel/dispose the isolated runtime; only the visible BTW entries are restored from hidden session entries. This design adopts the persistent side-session and branch-seeding approach from [dbachelder/pi-btw](https://github.com/dbachelder/pi-btw).
 
 ## Documentation
 
