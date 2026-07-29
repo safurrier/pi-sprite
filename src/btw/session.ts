@@ -154,7 +154,12 @@ export class BtwAgentSession {
 	private disposed = false;
 	private generation = 0;
 	private currentSession: BtwSession | undefined;
-	private active?: { reject: (error: Error) => void; settled: boolean; unsubscribe?: () => void };
+	private active?: {
+		cancellation: Promise<never>;
+		reject: (error: Error) => void;
+		settled: boolean;
+		unsubscribe?: () => void;
+	};
 
 	constructor(
 		private readonly dependencies: BtwSessionDependencies = {
@@ -223,22 +228,29 @@ export class BtwAgentSession {
 		if (this.busy || this.disposed) throw new Error("A BTW response is already running.");
 		this.busy = true;
 		const generation = this.generation;
+		const active = this.startActive();
 		let session: BtwSession | undefined;
 		try {
-			session = options.seedFromMainBranch
-				? await this.ensurePersistent(ctx, options.thinkingLevel)
-				: await this.createDisposable(ctx, options.thinkingLevel);
+			const creation = options.seedFromMainBranch
+				? this.ensurePersistent(ctx, options.thinkingLevel, generation)
+				: this.createDisposable(ctx, options.thinkingLevel, generation);
+			session = await Promise.race([creation, active.cancellation]);
 			if (this.disposed || generation !== this.generation) throw new Error("BTW request was cancelled.");
 			this.currentSession = session;
-			return await this.run(session, prompt, options.onUpdate);
+			return await this.run(session, prompt, active, options.onUpdate);
 		} finally {
 			if (this.currentSession === session) this.currentSession = undefined;
 			if (!options.seedFromMainBranch) session?.dispose();
+			active.settled = true;
+			active.unsubscribe?.();
+			if (this.active === active) this.active = undefined;
 			this.busy = false;
 		}
 	}
 
 	async cancel(): Promise<void> {
+		if (!this.busy) return;
+		this.generation++;
 		await this.stop(new Error("BTW request was cancelled."));
 	}
 
@@ -250,12 +262,26 @@ export class BtwAgentSession {
 		this.session = undefined;
 	}
 
+	private startActive(): NonNullable<BtwAgentSession["active"]> {
+		let rejectCancellation!: (error: Error) => void;
+		const cancellation = new Promise<never>((_resolve, reject) => {
+			rejectCancellation = reject;
+		});
+		const active = {
+			cancellation,
+			reject: rejectCancellation,
+			settled: false,
+			unsubscribe: undefined as (() => void) | undefined,
+		};
+		this.active = active;
+		return active;
+	}
+
 	private async stop(error: Error): Promise<void> {
 		const active = this.active;
 		if (!active || active.settled) return;
 		active.settled = true;
 		active.unsubscribe?.();
-		if (this.active === active) this.active = undefined;
 		active.reject(error);
 		try {
 			await this.currentSession?.abort();
@@ -267,28 +293,20 @@ export class BtwAgentSession {
 	private async run(
 		session: BtwSession,
 		prompt: string,
+		active: NonNullable<BtwAgentSession["active"]>,
 		onUpdate?: (update: BtwStreamUpdate) => void,
 	): Promise<string> {
-		let rejectCancellation!: (error: Error) => void;
-		const cancellation = new Promise<never>((_resolve, reject) => {
-			rejectCancellation = reject;
-		});
-		const active = { reject: rejectCancellation, settled: false, unsubscribe: undefined as (() => void) | undefined };
-		this.active = active;
 		active.unsubscribe = session.subscribe((event: SessionEvent) => {
 			const update = streamUpdate(event);
 			if (update) onUpdate?.(update);
 		});
-		try {
-			await Promise.race([session.prompt(prompt, { expandPromptTemplates: false, source: "extension" }), cancellation]);
-			const text = extractAssistantText(session.agent.state.messages as unknown[]);
-			if (!text) throw new Error("BTW response returned no assistant text.");
-			return text;
-		} finally {
-			active.settled = true;
-			active.unsubscribe?.();
-			if (this.active === active) this.active = undefined;
-		}
+		await Promise.race([
+			session.prompt(prompt, { expandPromptTemplates: false, source: "extension" }),
+			active.cancellation,
+		]);
+		const text = extractAssistantText(session.agent.state.messages as unknown[]);
+		if (!text) throw new Error("BTW response returned no assistant text.");
+		return text;
 	}
 
 	private async createSession(
@@ -308,11 +326,24 @@ export class BtwAgentSession {
 		return created.session;
 	}
 
-	private async createDisposable(ctx: ExtensionCommandContext, thinkingLevel: BtwThinkingLevel): Promise<BtwSession> {
-		return this.createSession(ctx, thinkingLevel, SessionManager.inMemory(ctx.cwd));
+	private async createDisposable(
+		ctx: ExtensionCommandContext,
+		thinkingLevel: BtwThinkingLevel,
+		expectedGeneration: number,
+	): Promise<BtwSession> {
+		const session = await this.createSession(ctx, thinkingLevel, SessionManager.inMemory(ctx.cwd));
+		if (this.disposed || expectedGeneration !== this.generation) {
+			session.dispose();
+			throw new Error(this.disposed ? "BTW session was disposed." : "BTW request was cancelled.");
+		}
+		return session;
 	}
 
-	private async ensurePersistent(ctx: ExtensionCommandContext, thinkingLevel: BtwThinkingLevel): Promise<BtwSession> {
+	private async ensurePersistent(
+		ctx: ExtensionCommandContext,
+		thinkingLevel: BtwThinkingLevel,
+		expectedGeneration?: number,
+	): Promise<BtwSession> {
 		if (this.session) {
 			this.session.setThinkingLevel(thinkingLevel);
 			return this.session;
@@ -321,12 +352,14 @@ export class BtwAgentSession {
 		const leafId = ctx.sessionManager.getLeafId();
 		const mainContext = this.dependencies.buildContext(branch, leafId);
 		const manager = this.dependencies.createForkManager(ctx);
-		for (const message of restoredMessages(this.restoredThread, ctx.model!)) manager.appendMessage(message as never);
+		const hasForkedParentContext = manager.getEntries().length > 0;
+		const restored = restoredMessages(this.restoredThread, ctx.model!);
+		for (const message of restored) manager.appendMessage(message as never);
 		const session = await this.createSession(ctx, thinkingLevel, manager);
-		if (!manager.getEntries().length) session.agent.state.messages = mainContext.messages as never;
-		if (this.disposed) {
+		if (!hasForkedParentContext) session.agent.state.messages = [...mainContext.messages, ...restored] as never;
+		if (this.disposed || (expectedGeneration !== undefined && expectedGeneration !== this.generation)) {
 			session.dispose();
-			throw new Error("BTW session was disposed.");
+			throw new Error(this.disposed ? "BTW session was disposed." : "BTW request was cancelled.");
 		}
 		this.fork = {
 			parentSessionId: ctx.sessionManager.getSessionId(),

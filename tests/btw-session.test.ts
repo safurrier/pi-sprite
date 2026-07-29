@@ -27,12 +27,17 @@ function fakeManager(initialMessages: any[] = []) {
 	};
 }
 
-function fakeSdk(options: { delayCreate?: boolean; holdPrompt?: boolean; events?: any[] } = {}) {
+function fakeSdk(
+	options: { delayCreate?: boolean; holdPrompt?: boolean; events?: any[]; appendCreationEntry?: boolean } = {},
+) {
 	const created: any[] = [];
 	const sessions: any[] = [];
 	const create = async (config: any) => {
 		created.push(config);
 		if (options.delayCreate) await new Promise<void>((resolve) => setImmediate(resolve));
+		if (options.appendCreationEntry) {
+			config.sessionManager.appendCustomMessageEntry("sdk-model", "model configuration", false, {});
+		}
 		const listeners: Listener[] = [];
 		const session: any = {
 			agent: { state: { messages: config.sessionManager.buildSessionContext().messages } },
@@ -51,6 +56,7 @@ function fakeSdk(options: { delayCreate?: boolean; holdPrompt?: boolean; events?
 			},
 			async prompt(prompt: string) {
 				session.prompts.push(prompt);
+				session.promptContexts.push([...session.agent.state.messages]);
 				for (const event of options.events ?? []) for (const listener of [...listeners]) listener(event);
 				if (options.holdPrompt) return await new Promise<void>(() => {});
 				const user = { role: "user", content: prompt, timestamp: Date.now() };
@@ -60,6 +66,7 @@ function fakeSdk(options: { delayCreate?: boolean; holdPrompt?: boolean; events?
 				session.agent.state.messages = config.sessionManager.buildSessionContext().messages;
 			},
 			prompts: [] as string[],
+			promptContexts: [] as any[][],
 			async abort() {
 				session.aborted++;
 			},
@@ -128,7 +135,7 @@ function deps(sdk: ReturnType<typeof fakeSdk>) {
 	};
 }
 
-test("real fork manager persists only the exact active parent path", async () => {
+test("real fork manager activates the exact parent path without claiming path-only child persistence", async () => {
 	const root = await mkdtemp(join(tmpdir(), "pi-sprite-btw-fork-"));
 	try {
 		const parentFile = join(root, "parent.jsonl");
@@ -180,7 +187,7 @@ test("real fork manager persists only the exact active parent path", async () =>
 	}
 });
 
-test("persistent BTW forks the exact active leaf once and continues a durable child session", async () => {
+test("persistent BTW uses the exact active leaf as model context and continues a durable child session", async () => {
 	const sdk = fakeSdk();
 	const setup = deps(sdk);
 	const { ctx } = context();
@@ -273,6 +280,33 @@ test("restored visible BTW exchanges are persisted into the child transcript", a
 	assert.ok(messages.some((message: any) => message.content?.[0]?.text === "old answer"));
 });
 
+test("fallback sessions seed parent model context before SDK configuration entries are appended", async () => {
+	for (const fallback of ["ephemeral parent", "failed parent file or leaf lookup"]) {
+		const sdk = fakeSdk({ appendCreationEntry: true });
+		const current = context();
+		if (fallback === "ephemeral parent") current.ctx.sessionManager.getSessionFile = () => undefined;
+		else current.ctx.sessionManager.getLeafId = () => "missing-leaf";
+		const dependencies = {
+			create: sdk.create,
+			buildContext(branch: any[]) {
+				return { messages: branch.filter((entry) => entry.type === "message").map((entry) => entry.message) };
+			},
+			createForkManager() {
+				return fakeManager();
+			},
+		} as any;
+		await new BtwAgentSession(dependencies).ask(current.ctx as any, "fallback", {
+			seedFromMainBranch: true,
+			thinkingLevel: "xhigh",
+		});
+		assert.equal(sdk.sessions[0].promptContexts[0][0].content, "main context", fallback);
+		assert.ok(
+			sdk.created[0].sessionManager.getEntries().some((entry: any) => entry.message?.customType === "sdk-model"),
+			fallback,
+		);
+	}
+});
+
 test("simultaneous asks reject before a second session is created", async () => {
 	const sdk = fakeSdk({ delayCreate: true });
 	const btw = new BtwAgentSession(deps(sdk).dependencies);
@@ -281,6 +315,21 @@ test("simultaneous asks reject before a second session is created", async () => 
 	await assert.rejects(btw.ask(ctx, "second", { seedFromMainBranch: true, thinkingLevel: "low" }), /already running/u);
 	await first;
 	assert.equal(sdk.created.length, 1);
+});
+
+test("cancel during delayed child creation prevents every prompt and disposes the unseen session", async () => {
+	const sdk = fakeSdk({ delayCreate: true });
+	const btw = new BtwAgentSession(deps(sdk).dependencies);
+	const pending = btw.ask(context().ctx as any, "must not run", {
+		seedFromMainBranch: true,
+		thinkingLevel: "xhigh",
+	});
+	await btw.cancel();
+	await assert.rejects(pending, /cancelled/u);
+	await new Promise((resolve) => setImmediate(resolve));
+	assert.equal(sdk.sessions.length, 1);
+	assert.deepEqual(sdk.sessions[0].prompts, []);
+	assert.equal(sdk.sessions[0].disposed, 1);
 });
 
 test("dispose and cancel settle callers and clean up SDK sessions", async () => {
