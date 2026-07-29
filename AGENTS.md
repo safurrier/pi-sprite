@@ -33,6 +33,8 @@ Use focused Node tests while iterating, then run the broad local gate before han
 <!-- source: session-history | session: 2026-06-28T21-27-20-696Z_019f1021-3978-744f-81b9-40a00ee2bf8c | extracted: 2026-07-02 -->
 - **DO** implement recap/BTW model work through isolated Pi side sessions first, with direct API-key completion only as a fallback. **NOT** require separate provider API keys for normal `/recap` or `/btw` use. **BECAUSE** users expect extension completions to reuse Pi's active model/provider harness without polluting the main thread.
 
+- **DO** make contextual BTW a durable child fork with the parent branch, AGENTS context, loaded skill metadata, normal coding tools, and explicit parent status/refresh. **NOT** reduce it to a prompt-only completion, recursively load arbitrary parent extensions, resolve on low-level `agent_end`, or silently synchronize parent progress. **BECAUSE** BTW should behave like an independent Pi coding session while preserving lifecycle isolation and deliberate context transfer.
+
 - **DO** register pi-sprite custom entries through `src/agent/session-entries.ts`. **NOT** append hidden recap/BTW/session bookkeeping without adding it to the shared context filter. **BECAUSE** side work must stay out of main model context unless `/btw:inject` or `/btw:summarize` explicitly sends it.
 
 - **DO** keep external pet bytes behind the shared download/import safety policy. **NOT** fetch Petdex or `import-url` assets directly from command/runtime code. **BECAUSE** third-party manifests and URLs are untrusted and need the same HTTPS, size, and timeout checks.

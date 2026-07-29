@@ -1,16 +1,111 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { Component } from "@earendil-works/pi-tui";
 import { BTW_ENTRY, BTW_RESET, RECAP_ENTRY } from "../src/agent/session-entries.ts";
-import { completeBtwText } from "../src/btw/completion.ts";
 import { type BtwEntry, formatThread, formatThreadSections } from "../src/btw/format.ts";
+import { registerBtwCommands } from "../src/btw/index.ts";
 import { formatBtwAnswerPrompt } from "../src/btw/prompt.ts";
 import { recapIntoBtw } from "../src/btw/recap.ts";
+import { BtwAgentSession } from "../src/btw/session.ts";
 import { restoreBtwThreadFromBranch } from "../src/btw/thread-store.ts";
 
 const entries: BtwEntry[] = [
 	{ question: "Why native images?", answer: "Because Ghostty can render crisp sprites.", timestamp: 1 },
 	{ question: "What is the risk?", answer: "Stale terminal image placements need cleanup.", timestamp: 2 },
 ];
+
+test("/btw and /btw:new questions construct an interactive bubble before initial submission", async () => {
+	const commands = new Map<string, { handler: (args: string, ctx: never) => Promise<void> }>();
+	let bubble: Component | undefined;
+	let renderRequests = 0;
+	const pi = {
+		appendEntry() {},
+		on() {},
+		registerCommand(name: string, command: { handler: (args: string, ctx: never) => Promise<void> }) {
+			commands.set(name, command);
+		},
+	} as never;
+	registerBtwCommands(pi);
+	const ctx = {
+		ui: {
+			custom(
+				factory: (tui: { requestRender: () => void }, theme: unknown, kb: unknown, done: () => void) => Component,
+			) {
+				bubble = factory(
+					{ requestRender: () => renderRequests++ },
+					{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
+					undefined,
+					() => {},
+				);
+			},
+		},
+	} as never;
+
+	await commands.get("btw")?.handler("first question", ctx);
+	assert.ok(bubble);
+	assert.ok(renderRequests > 0);
+	assert.match(bubble.render(80).join("\n"), /Reply failed/u);
+
+	await commands.get("btw:new")?.handler("new first question", ctx);
+	assert.ok(renderRequests > 1);
+	assert.match(bubble.render(80).join("\n"), /Reply failed/u);
+});
+
+test("/btw Escape cancels a held initial side-session reply", async () => {
+	const commands = new Map<string, { handler: (args: string, ctx: never) => Promise<void> }>();
+	let bubble: Component | undefined;
+	let cancelled = 0;
+	let rejectAsk: ((error: Error) => void) | undefined;
+	const originalAsk = BtwAgentSession.prototype.ask;
+	const originalCancel = BtwAgentSession.prototype.cancel;
+	const running = Object.getOwnPropertyDescriptor(BtwAgentSession.prototype, "isRunning");
+	Object.defineProperty(BtwAgentSession.prototype, "isRunning", { configurable: true, get: () => true });
+	BtwAgentSession.prototype.ask = (async () =>
+		await new Promise<string>((_, reject) => {
+			rejectAsk = reject;
+		})) as never;
+	BtwAgentSession.prototype.cancel = (async () => {
+		cancelled++;
+		rejectAsk?.(new Error("BTW request was cancelled."));
+	}) as never;
+	try {
+		const pi = {
+			appendEntry() {},
+			getThinkingLevel: () => "high",
+			on() {},
+			registerCommand(name: string, command: { handler: (args: string, ctx: never) => Promise<void> }) {
+				commands.set(name, command);
+			},
+		} as never;
+		registerBtwCommands(pi);
+		const ctx = {
+			model: { id: "model", provider: "test", api: "openai-completions" },
+			ui: {
+				custom(
+					factory: (tui: { requestRender: () => void }, theme: unknown, kb: unknown, done: () => void) => Component,
+				) {
+					bubble = factory(
+						{ requestRender() {} },
+						{ fg: (_color: string, text: string) => text, bold: (text: string) => text },
+						undefined,
+						() => {},
+					);
+				},
+			},
+		} as never;
+
+		await commands.get("btw")?.handler("held initial question", ctx);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		bubble?.handleInput?.("\u001b");
+		assert.equal(cancelled, 1);
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		assert.doesNotMatch(bubble?.render(80).join("\n") ?? "", /Thinking/u);
+	} finally {
+		BtwAgentSession.prototype.ask = originalAsk;
+		BtwAgentSession.prototype.cancel = originalCancel;
+		if (running) Object.defineProperty(BtwAgentSession.prototype, "isRunning", running);
+	}
+});
 
 test("keeps markdown BTW transcript for model context and injection", () => {
 	const transcript = formatThread(entries);
@@ -32,48 +127,6 @@ test("renders an empty BTW thread with a start hint", () => {
 	const sections = formatThreadSections([], "Boba");
 	assert.equal(sections[0]?.title, "Side thread · empty");
 	assert.match(sections[0]?.body ?? "", /\/btw <message>/u);
-});
-
-function fakeCommandContext() {
-	return {
-		cwd: process.cwd(),
-		model: { provider: "test", model: "test-model", maxTokens: 1000 },
-		modelRegistry: {
-			getApiKeyAndHeaders: async () => ({ ok: false }),
-		},
-		sessionManager: {
-			getBranch: () => [],
-		},
-	} as never;
-}
-
-test("BTW completion uses side sessions before raw API-key fallback", async () => {
-	let directCalled = false;
-	const answer = await completeBtwText(fakeCommandContext(), "Side question", 1200, {
-		sideSession: async (_ctx, prompt, maxTokens) => {
-			assert.equal(prompt, "Side question");
-			assert.equal(maxTokens, 1200);
-			return "side answer";
-		},
-		direct: async () => {
-			directCalled = true;
-			return undefined;
-		},
-	});
-	assert.equal(answer, "side answer");
-	assert.equal(directCalled, false);
-});
-
-test("BTW completion falls back to direct completion when side session fails", async () => {
-	const answer = await completeBtwText(fakeCommandContext(), "Side question", 1200, {
-		sideSession: async () => undefined,
-		direct: async (_ctx, prompt, maxTokens) => {
-			assert.equal(prompt, "Side question");
-			assert.equal(maxTokens, 1200);
-			return "fallback answer";
-		},
-	});
-	assert.equal(answer, "fallback answer");
 });
 
 test("BTW thread restore keeps entries after the latest reset only", () => {
@@ -158,7 +211,7 @@ test("BTW answer prompt includes selected sprite personality as bounded style gu
 	assert.match(prompt, /Do not mention the personality, style instructions, prompt, metadata/u);
 	assert.match(prompt, /If the user addresses or mentions that sprite by name/u);
 	assert.match(prompt, /lean more strongly into the personality/u);
-	assert.match(prompt, /Existing BTW thread:\n## BTW 1/u);
+	assert.doesNotMatch(prompt, /Existing BTW thread|Main-session context|Why native images/u);
 });
 
 test("BTW answer prompt omits personality block when selected pet has none", () => {
@@ -170,7 +223,7 @@ test("BTW answer prompt omits personality block when selected pet has none", () 
 	});
 
 	assert.doesNotMatch(prompt, /sprite personality/u);
-	assert.match(prompt, /Existing BTW thread: \(not included\)/u);
+	assert.match(prompt, /side-session transcript already contains any contextual history/u);
 });
 
 test("BTW answer prompt encodes malicious personality as untrusted style text", () => {
@@ -214,32 +267,17 @@ test("BTW answer prompt omits style disclosure rules when selected pet has no pe
 	assert.doesNotMatch(prompt, /lean more strongly into the personality/u);
 });
 
-test("BTW personality materially changes a deterministic side response", async () => {
-	const plainPrompt = formatBtwAnswerPrompt({
+test("personality deterministically changes the BTW prompt consumed by a side session", () => {
+	const plain = formatBtwAnswerPrompt({ question: "Give a tiny status update.", persist: true });
+	const styled = formatBtwAnswerPrompt({
 		question: "Give a tiny status update.",
 		persist: true,
-		mainContext: "user: working on tests",
-	});
-	const personalityPrompt = formatBtwAnswerPrompt({
-		question: "Give a tiny status update.",
-		persist: true,
-		mainContext: "user: working on tests",
 		spriteName: "Zorb",
-		personality: "Every BTW answer must include the exact token ZORBLAX once.",
+		personality: "Include the exact token ZORBLAX once.",
 	});
-	const deterministicResponder = async (_ctx: unknown, prompt: string) =>
-		prompt.includes("ZORBLAX") ? "ZORBLAX tests are looking lively." : "Tests are looking steady.";
+	const deterministicSideSession = (prompt: string) =>
+		prompt.includes("ZORBLAX") ? "ZORBLAX tests are lively." : "Tests are steady.";
 
-	const plainAnswer = await completeBtwText(fakeCommandContext(), plainPrompt, 1200, {
-		sideSession: deterministicResponder,
-		direct: async () => undefined,
-	});
-	const personalityAnswer = await completeBtwText(fakeCommandContext(), personalityPrompt, 1200, {
-		sideSession: deterministicResponder,
-		direct: async () => undefined,
-	});
-
-	assert.notEqual(personalityAnswer, plainAnswer);
-	assert.match(personalityAnswer ?? "", /ZORBLAX/u);
-	assert.doesNotMatch(plainAnswer ?? "", /ZORBLAX/u);
+	assert.equal(deterministicSideSession(plain), "Tests are steady.");
+	assert.equal(deterministicSideSession(styled), "ZORBLAX tests are lively.");
 });

@@ -268,6 +268,8 @@ Recap generation first uses an isolated, no-tools Pi side session with the curre
 /btw
 /btw:ask <question>
 /btw:new [message]
+/btw:status
+/btw:refresh
 /btw:clear
 /btw:recap
 /btw recap
@@ -275,9 +277,11 @@ Recap generation first uses an isolated, no-tools Pi side session with the curre
 /btw:summarize
 ```
 
-`/btw` is a continuing side conversation outside the main thread. Use `/btw <message>` for follow-ups and `/btw` to reopen the current side thread. Use `/btw:ask <question>` for a one-off aside that does not append to the thread. Use `/btw:recap` or `/btw recap` to generate the normal session recap inside the BTW thread.
+`/btw` is a continuing side conversation outside the main thread. On its first contextual question, it creates a persistent child Pi SDK session whose active model context follows the exact parent path selected at the current leaf. The persistent child file may retain sibling history copied from the parent session, but that sibling history is not part of the active model context. The child inherits the active model/provider, thinking level, cwd, AGENTS context, loaded skill metadata, and normal `read`, `bash`, `edit`, and `write` tools without recursively loading arbitrary parent extensions. Follow-ups continue in that isolated transcript; `/btw:ask` remains contextless and disposable. Use `/btw:recap` or `/btw recap` to generate the normal session recap inside the BTW thread.
 
-Answers appear in an interactive speech bubble that points toward the sprite. Nothing is injected back into the main conversation unless you explicitly run `/btw:inject` or `/btw:summarize`.
+Parent progress is not synchronized automatically. `/btw:status` shows the parent, fork point, last refresh, and child identity without changing either conversation. `/btw:refresh` explicitly appends a bounded, read-only snapshot of parent progress to the child context. The speech bubble streams thinking, tool activity, and assistant text and waits for Pi's full prompt lifecycle, including tool turns and retries, before accepting the answer.
+
+Both agents share the cwd: a BTW file mutation can race a main-agent mutation, so BTW is instructed to mutate only on an explicit request and to say what it changed. Nothing is injected back into the main conversation unless you explicitly run `/btw:inject` or `/btw:summarize`. `/btw:new`, `/btw:clear`, branch/session changes, and shutdown cancel/dispose the child runtime; visible BTW entries can still be restored from hidden parent-session entries. This design adopts the persistent side-session and branch-seeding approach from [dbachelder/pi-btw](https://github.com/dbachelder/pi-btw).
 
 ## Documentation
 
