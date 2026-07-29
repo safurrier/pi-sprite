@@ -1,6 +1,6 @@
 {
 	"name": "pi-sprite",
-	"version": "1.0.0",
+	"version": "1.1.0",
 	"description": "A slim Codex-style sprite companion for Pi with /context, /recap, and /btw.",
 	"keywords": [
 		"pi-package",
