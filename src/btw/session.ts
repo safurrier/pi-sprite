@@ -13,35 +13,71 @@ import type { BtwEntry } from "./format.ts";
 
 const BTW_SYSTEM_PROMPT = [
 	"You are answering an explicit BTW side question for a Pi coding session.",
-	"This is a separate continuing side thread. Do not continue the main turn or inject anything into it.",
+	"This is a separate continuing child thread forked from the main Pi session. Do not continue the main turn or inject anything into it.",
 	"You have normal coding tools in the same working directory as the main agent. File mutations can race with the main agent; call write/edit or mutation commands only when the user explicitly asks, and describe any mutation clearly.",
+	"Parent progress is not synchronized automatically. Use pi-sprite-btw-parent-refresh messages only as read-only snapshots requested by the user.",
 	"Answer concisely and practically.",
 ].join("\n");
 
-function btwResourceLoader(): ResourceLoader {
+function btwResourceLoader(ctx: ExtensionCommandContext): ResourceLoader {
 	const extensions = { extensions: [], errors: [], runtime: createExtensionRuntime() };
+	const options = ctx.getSystemPromptOptions();
 	return {
 		getExtensions: () => extensions,
-		getSkills: () => ({ skills: [], diagnostics: [] }),
+		getSkills: () => ({ skills: options.skills ?? [], diagnostics: [] }),
 		getPrompts: () => ({ prompts: [], diagnostics: [] }),
 		getThemes: () => ({ themes: [], diagnostics: [] }),
-		getAgentsFiles: () => ({ agentsFiles: [] }),
-		getSystemPrompt: () => undefined,
-		getAppendSystemPrompt: () => [BTW_SYSTEM_PROMPT],
+		getAgentsFiles: () => ({ agentsFiles: options.contextFiles ?? [] }),
+		getSystemPrompt: () => options.customPrompt,
+		getAppendSystemPrompt: () => [options.appendSystemPrompt, BTW_SYSTEM_PROMPT].filter(Boolean) as string[],
 		extendResources: () => {},
 		reload: async () => {},
 	};
 }
 
 export type BtwStreamUpdate = { kind: "thinking" | "tool" | "assistant"; text: string };
+export type BtwParentStatus = {
+	parentSessionId: string;
+	parentSessionFile?: string;
+	forkLeafId: string | null;
+	currentLeafId: string | null;
+	refreshedLeafId: string | null;
+	newEntries: number;
+	childSessionId?: string;
+	childSessionFile?: string;
+};
 type BtwSession = Awaited<ReturnType<typeof createAgentSession>>["session"];
 type SessionEvent = { type: string; [key: string]: unknown };
 type BtwThinkingLevel = ReturnType<ExtensionAPI["getThinkingLevel"]>;
 
+type ForkIdentity = {
+	parentSessionId: string;
+	parentSessionFile?: string;
+	forkLeafId: string | null;
+	forkBranchLength: number;
+	parentMessageCount: number;
+	refreshedLeafId: string | null;
+};
+
 export type BtwSessionDependencies = {
 	create: typeof createAgentSession;
 	buildContext: typeof buildSessionContext;
+	createForkManager: (ctx: ExtensionCommandContext) => SessionManager;
 };
+
+export function createBtwForkManager(ctx: ExtensionCommandContext): SessionManager {
+	const parentFile = ctx.sessionManager.getSessionFile();
+	const leafId = ctx.sessionManager.getLeafId();
+	if (parentFile && leafId) {
+		const source = SessionManager.open(parentFile);
+		if (source.getEntry(leafId)) {
+			const fork = SessionManager.forkFrom(parentFile, ctx.cwd, source.getSessionDir());
+			fork.branch(leafId);
+			return fork;
+		}
+	}
+	return SessionManager.create(ctx.cwd, undefined, { parentSession: parentFile });
+}
 
 function bounded(value: unknown, limit = 500): string {
 	try {
@@ -73,7 +109,7 @@ function streamUpdate(event: SessionEvent): BtwStreamUpdate | undefined {
 	return { kind: "tool", text: `${name}${event.isError ? " failed" : ""}: ${result || "completed"}` };
 }
 
-function restoredMessages(entries: BtwEntry[], model: Model<any>): unknown[] {
+function restoredMessages(entries: BtwEntry[], model: Model<any>): Array<{ role: "user" } | AssistantMessage> {
 	const usage = {
 		input: 0,
 		output: 0,
@@ -83,7 +119,7 @@ function restoredMessages(entries: BtwEntry[], model: Model<any>): unknown[] {
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 	};
 	return entries.flatMap((entry) => [
-		{ role: "user", content: entry.question, timestamp: entry.timestamp },
+		{ role: "user" as const, content: entry.question, timestamp: entry.timestamp },
 		{
 			role: "assistant",
 			content: [{ type: "text", text: entry.answer }],
@@ -97,9 +133,23 @@ function restoredMessages(entries: BtwEntry[], model: Model<any>): unknown[] {
 	]);
 }
 
-/** A persistent, in-memory AgentSession that never replaces Pi's active runtime. */
+function messageText(message: any): string {
+	const content = message?.content;
+	if (typeof content === "string") return bounded(content, 800);
+	if (!Array.isArray(content)) return "";
+	return bounded(
+		content
+			.filter((part) => part?.type === "text")
+			.map((part) => part.text)
+			.join("\n"),
+		800,
+	);
+}
+
+/** A persistent child AgentSession that never replaces Pi's active runtime. */
 export class BtwAgentSession {
 	private session: BtwSession | undefined;
+	private fork: ForkIdentity | undefined;
 	private busy = false;
 	private disposed = false;
 	private generation = 0;
@@ -110,12 +160,54 @@ export class BtwAgentSession {
 		private readonly dependencies: BtwSessionDependencies = {
 			create: createAgentSession,
 			buildContext: buildSessionContext,
+			createForkManager: createBtwForkManager,
 		},
 		private readonly restoredThread: BtwEntry[] = [],
 	) {}
 
 	get isRunning(): boolean {
 		return this.busy;
+	}
+
+	parentStatus(ctx: ExtensionCommandContext): BtwParentStatus {
+		const currentBranchLength = Array.from(ctx.sessionManager.getBranch() as Iterable<unknown>).length;
+		return {
+			parentSessionId: ctx.sessionManager.getSessionId(),
+			parentSessionFile: ctx.sessionManager.getSessionFile(),
+			forkLeafId: this.fork?.forkLeafId ?? null,
+			currentLeafId: ctx.sessionManager.getLeafId(),
+			refreshedLeafId: this.fork?.refreshedLeafId ?? null,
+			newEntries: Math.max(0, currentBranchLength - (this.fork?.forkBranchLength ?? currentBranchLength)),
+			childSessionId: this.session?.sessionId,
+			childSessionFile: this.session?.sessionFile,
+		};
+	}
+
+	async refreshParent(ctx: ExtensionCommandContext, thinkingLevel: BtwThinkingLevel): Promise<BtwParentStatus> {
+		const session = await this.ensurePersistent(ctx, thinkingLevel);
+		const branch = Array.from(ctx.sessionManager.getBranch() as Iterable<any>);
+		const leafId = ctx.sessionManager.getLeafId();
+		const context = this.dependencies.buildContext(branch, leafId);
+		const start = this.fork?.parentMessageCount ?? context.messages.length;
+		const delta = context.messages.slice(start).slice(-8);
+		const lines = delta
+			.map((message: any) => `${bounded(message.role, 40) || "message"}: ${messageText(message)}`)
+			.filter((line: string) => !line.endsWith(": "));
+		const content = [
+			"Read-only parent-session refresh requested by the user.",
+			`Parent leaf: ${leafId ?? "none"}. New contextual messages: ${delta.length}.`,
+			...(lines.length ? lines : ["No new parent messages since the previous snapshot."]),
+		].join("\n");
+		session.sessionManager.appendCustomMessageEntry("pi-sprite-btw-parent-refresh", content, false, {
+			parentSessionId: ctx.sessionManager.getSessionId(),
+			parentLeafId: leafId,
+		});
+		session.agent.state.messages = session.sessionManager.buildSessionContext().messages as never;
+		if (this.fork) {
+			this.fork.parentMessageCount = context.messages.length;
+			this.fork.refreshedLeafId = leafId;
+		}
+		return this.parentStatus(ctx);
 	}
 
 	async ask(
@@ -128,7 +220,6 @@ export class BtwAgentSession {
 		},
 	): Promise<string> {
 		if (!ctx.model) throw new Error("No active model selected for /btw.");
-		// Set this before any await: two simultaneous callers must not both initialize.
 		if (this.busy || this.disposed) throw new Error("A BTW response is already running.");
 		this.busy = true;
 		const generation = this.generation;
@@ -178,46 +269,47 @@ export class BtwAgentSession {
 		prompt: string,
 		onUpdate?: (update: BtwStreamUpdate) => void,
 	): Promise<string> {
-		return new Promise<string>((resolve, reject) => {
-			const active = { reject, settled: false, unsubscribe: undefined as (() => void) | undefined };
-			this.active = active;
-			const finish = (error?: Error, text?: string) => {
-				if (active.settled) return;
-				active.settled = true;
-				active.unsubscribe?.();
-				if (this.active === active) this.active = undefined;
-				if (error) reject(error);
-				else if (text) resolve(text);
-				else reject(new Error("BTW response returned no assistant text."));
-			};
-			active.unsubscribe = session.subscribe((event: SessionEvent) => {
-				const update = streamUpdate(event);
-				if (update) onUpdate?.(update);
-				if (event.type === "agent_end" && !event.willRetry)
-					finish(undefined, extractAssistantText((event.messages as unknown[]) ?? []));
-			});
-			void session
-				.prompt(prompt, { expandPromptTemplates: false, source: "extension" })
-				.catch((error: unknown) => finish(error instanceof Error ? error : new Error("BTW session failed.")));
+		let rejectCancellation!: (error: Error) => void;
+		const cancellation = new Promise<never>((_resolve, reject) => {
+			rejectCancellation = reject;
 		});
+		const active = { reject: rejectCancellation, settled: false, unsubscribe: undefined as (() => void) | undefined };
+		this.active = active;
+		active.unsubscribe = session.subscribe((event: SessionEvent) => {
+			const update = streamUpdate(event);
+			if (update) onUpdate?.(update);
+		});
+		try {
+			await Promise.race([session.prompt(prompt, { expandPromptTemplates: false, source: "extension" }), cancellation]);
+			const text = extractAssistantText(session.agent.state.messages as unknown[]);
+			if (!text) throw new Error("BTW response returned no assistant text.");
+			return text;
+		} finally {
+			active.settled = true;
+			active.unsubscribe?.();
+			if (this.active === active) this.active = undefined;
+		}
 	}
 
-	private async createSession(ctx: ExtensionCommandContext, thinkingLevel: BtwThinkingLevel): Promise<BtwSession> {
+	private async createSession(
+		ctx: ExtensionCommandContext,
+		thinkingLevel: BtwThinkingLevel,
+		sessionManager: SessionManager,
+	): Promise<BtwSession> {
 		const created = await this.dependencies.create({
 			cwd: ctx.cwd,
-			sessionManager: SessionManager.inMemory(ctx.cwd),
+			sessionManager,
 			model: ctx.model!,
 			modelRegistry: ctx.modelRegistry as never,
 			thinkingLevel,
 			tools: ["read", "bash", "edit", "write"],
-			resourceLoader: btwResourceLoader(),
+			resourceLoader: btwResourceLoader(ctx),
 		});
 		return created.session;
 	}
 
 	private async createDisposable(ctx: ExtensionCommandContext, thinkingLevel: BtwThinkingLevel): Promise<BtwSession> {
-		// Never inspect or copy the main branch for /btw:ask.
-		return this.createSession(ctx, thinkingLevel);
+		return this.createSession(ctx, thinkingLevel, SessionManager.inMemory(ctx.cwd));
 	}
 
 	private async ensurePersistent(ctx: ExtensionCommandContext, thinkingLevel: BtwThinkingLevel): Promise<BtwSession> {
@@ -228,17 +320,22 @@ export class BtwAgentSession {
 		const branch = Array.from(ctx.sessionManager.getBranch() as Iterable<any>);
 		const leafId = ctx.sessionManager.getLeafId();
 		const mainContext = this.dependencies.buildContext(branch, leafId);
-		const session = await this.createSession(ctx, thinkingLevel);
+		const manager = this.dependencies.createForkManager(ctx);
+		for (const message of restoredMessages(this.restoredThread, ctx.model!)) manager.appendMessage(message as never);
+		const session = await this.createSession(ctx, thinkingLevel, manager);
+		if (!manager.getEntries().length) session.agent.state.messages = mainContext.messages as never;
 		if (this.disposed) {
 			session.dispose();
 			throw new Error("BTW session was disposed.");
 		}
-		// Seed exactly once, using the active branch leaf. Restored visible exchanges
-		// continue this private transcript; hidden custom entries are never copied.
-		session.agent.state.messages = [
-			...mainContext.messages,
-			...restoredMessages(this.restoredThread, ctx.model!),
-		] as never;
+		this.fork = {
+			parentSessionId: ctx.sessionManager.getSessionId(),
+			parentSessionFile: ctx.sessionManager.getSessionFile(),
+			forkLeafId: leafId,
+			forkBranchLength: branch.length,
+			parentMessageCount: mainContext.messages.length,
+			refreshedLeafId: leafId,
+		};
 		this.session = session;
 		return session;
 	}

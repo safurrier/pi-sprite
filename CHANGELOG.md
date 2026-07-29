@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Changed contextual `/btw` into a persistent child session forked from the exact active Pi branch with inherited AGENTS and skill context, normal coding tools, and full prompt-lifecycle completion.
+- Added `/btw:status` and explicit `/btw:refresh` commands for bounded, read-only parent-session awareness without automatic synchronization.
+
 ## 1.0.0 - First pi-sprite release
 
 - Added the `pi-sprite` Pi package with `/pet`, `/sprite`, `/context`, `/recap`, and `/btw` commands.

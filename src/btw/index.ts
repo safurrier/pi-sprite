@@ -13,7 +13,7 @@ import {
 import { type BtwEntry, formatThread, formatThreadSections } from "./format.ts";
 import { formatBtwAnswerPrompt } from "./prompt.ts";
 import { recapIntoBtw as addRecapToBtw, type BtwRecapAdapters } from "./recap.ts";
-import { BtwAgentSession, type BtwStreamUpdate } from "./session.ts";
+import { BtwAgentSession, type BtwParentStatus, type BtwStreamUpdate } from "./session.ts";
 import { appendBtwEntry, appendBtwReset, restoreBtwThreadFromBranch } from "./thread-store.ts";
 
 type ActivityStatus = "idle" | "running" | "ready" | "error";
@@ -207,6 +207,16 @@ function sendToMain(pi: ExtensionAPI, ctx: ExtensionCommandContext, content: str
 	else pi.sendUserMessage(content, { deliverAs: "followUp" });
 }
 
+function formatParentStatus(status: BtwParentStatus): string {
+	return [
+		`Parent: ${status.parentSessionId.slice(0, 8)} at ${status.currentLeafId ?? "no leaf"}`,
+		`Fork point: ${status.forkLeafId ?? "not started"}`,
+		`Last refresh: ${status.refreshedLeafId ?? "not refreshed"}`,
+		`Parent entries since fork: ${status.newEntries}`,
+		`Child: ${status.childSessionId?.slice(0, 8) ?? "not started"}`,
+	].join("\n");
+}
+
 const defaultBtwRecapAdapters: BtwRecapAdapters = {
 	generate: async (ctx, text) =>
 		generateRecapText(ctx, text, {
@@ -267,6 +277,20 @@ export function registerBtwCommands(pi: ExtensionAPI, hooks: BtwHooks = {}) {
 			const question = args.trim();
 			if (!question) return ctx.ui.notify("Usage: /btw:ask <question>", "warning");
 			await askSideQuestion(pi, question, ctx, hooks, { persist: false });
+		},
+	});
+	pi.registerCommand("btw:status", {
+		description: "Show the BTW child fork and read-only parent-session status",
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			ctx.ui.notify(formatParentStatus(btwSession.parentStatus(ctx)), "info");
+		},
+	});
+	pi.registerCommand("btw:refresh", {
+		description: "Explicitly add a bounded read-only parent-session refresh to BTW",
+		handler: async (_args: string, ctx: ExtensionCommandContext) => {
+			if (!ctx.model) return ctx.ui.notify("No active model selected for /btw.", "warning");
+			const status = await btwSession.refreshParent(ctx, pi.getThinkingLevel());
+			ctx.ui.notify(`BTW parent snapshot refreshed.\n${formatParentStatus(status)}`, "info");
 		},
 	});
 	pi.registerCommand("btw:new", {
