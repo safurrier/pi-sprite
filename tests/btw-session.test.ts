@@ -28,7 +28,13 @@ function fakeManager(initialMessages: any[] = []) {
 }
 
 function fakeSdk(
-	options: { delayCreate?: boolean; holdPrompt?: boolean; events?: any[]; appendCreationEntry?: boolean } = {},
+	options: {
+		delayCreate?: boolean;
+		holdPrompt?: boolean;
+		events?: any[];
+		appendCreationEntry?: boolean;
+		answers?: string[];
+	} = {},
 ) {
 	const created: any[] = [];
 	const sessions: any[] = [];
@@ -60,10 +66,14 @@ function fakeSdk(
 				for (const event of options.events ?? []) for (const listener of [...listeners]) listener(event);
 				if (options.holdPrompt) return await new Promise<void>(() => {});
 				const user = { role: "user", content: prompt, timestamp: Date.now() };
-				const answer = { role: "assistant", content: [{ type: "text", text: "answer" }] };
+				const answer = {
+					role: "assistant",
+					content: [{ type: "text", text: options.answers?.[session.prompts.length - 1] ?? "answer" }],
+				};
 				config.sessionManager.appendMessage(user);
 				config.sessionManager.appendMessage(answer);
 				session.agent.state.messages = config.sessionManager.buildSessionContext().messages;
+				for (const listener of [...listeners]) listener({ type: "message_end", message: answer });
 			},
 			prompts: [] as string[],
 			promptContexts: [] as any[][],
@@ -255,6 +265,17 @@ test("prompt completion, not agent_end, determines the final answer", async () =
 		thinkingLevel: "xhigh",
 	});
 	assert.equal(answer, "answer");
+});
+
+test("an empty later response cannot reuse a previous successful answer", async () => {
+	const sdk = fakeSdk({ answers: ["first answer", ""] });
+	const btw = new BtwAgentSession(deps(sdk).dependencies);
+	const ctx = context().ctx as any;
+	assert.equal(await btw.ask(ctx, "first", { seedFromMainBranch: true, thinkingLevel: "xhigh" }), "first answer");
+	await assert.rejects(
+		btw.ask(ctx, "second", { seedFromMainBranch: true, thinkingLevel: "xhigh" }),
+		/no assistant text/u,
+	);
 });
 
 test("disposable BTW tangent neither builds nor seeds main context and is disposed", async () => {

@@ -296,15 +296,19 @@ export class BtwAgentSession {
 		active: NonNullable<BtwAgentSession["active"]>,
 		onUpdate?: (update: BtwStreamUpdate) => void,
 	): Promise<string> {
+		let finalAssistantMessage: unknown;
 		active.unsubscribe = session.subscribe((event: SessionEvent) => {
 			const update = streamUpdate(event);
 			if (update) onUpdate?.(update);
+			if (event.type === "message_end" && (event.message as { role?: string } | undefined)?.role === "assistant") {
+				finalAssistantMessage = event.message;
+			}
 		});
 		await Promise.race([
 			session.prompt(prompt, { expandPromptTemplates: false, source: "extension" }),
 			active.cancellation,
 		]);
-		const text = extractAssistantText(session.agent.state.messages as unknown[]);
+		const text = extractAssistantText(finalAssistantMessage ? [finalAssistantMessage] : []);
 		if (!text) throw new Error("BTW response returned no assistant text.");
 		return text;
 	}
