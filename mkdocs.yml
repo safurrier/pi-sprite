@@ -62,3 +62,4 @@ nav:
       - Pet Manifest: reference/pet-manifest.md
       - Rendering Modes: reference/rendering-modes.md
       - Release Checklist: reference/release.md
+      - PII Exposure Audit: reference/pii-exposure-audit.md

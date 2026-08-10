@@ -23,5 +23,6 @@
 | [`reference/pet-manifest.md`](reference/pet-manifest.md) | `pet.json` schema, supported sprite states, frame strips, and personality metadata |
 | [`reference/rendering-modes.md`](reference/rendering-modes.md) | Terminal rendering modes and when to use ANSI fallback or native placeholders |
 | [`reference/release.md`](reference/release.md) | npm release preflight, trusted publishing, and post-publish Pi smoke checks |
+| [`reference/pii-exposure-audit.md`](reference/pii-exposure-audit.md) | Bounded audit of tracked PII exposure risks and repository ignore coverage |
 
-<!-- generated-by: context-engineering@2.2.0 | last-updated: 2026-07-06 -->
+<!-- generated-by: context-engineering@2.2.0 | last-updated: 2026-08-10 -->

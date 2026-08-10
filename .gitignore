@@ -2,6 +2,17 @@ node_modules/
 *.log
 .DS_Store
 *.tgz
+# Local secrets and private keys. Keep a deliberately safe example file trackable.
+.env*
+!.env.example
+*.pem
+*.key
+credentials.*
+secrets.*
+# Potential user-data exports; add an explicit negation before committing a vetted fixture.
+*.sql
+*.csv
+*.xlsx
 PUBLISHING.MD
 .pi/
 **testing.js
