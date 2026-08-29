@@ -94,7 +94,7 @@ validation_checks = ["focused-unit-test", "unit-tests", "e2e-gate"]
 id = "side-session-completion-policy"
 title = "Hidden entries, side sessions, and completion fallbacks"
 kind = "pi-side-work"
-paths = ["src/agent/session-entries.ts", "src/agent/side-session.ts", "src/agent/side-completion.ts", "src/btw/thread-store.ts", "src/btw/completion.ts", "src/recap/generation.ts", "src/sprite/turn-status.ts", "src/sprite/live-status.ts", "tests/session-entries.test.ts", "tests/btw.test.ts", "tests/recap.test.ts", "tests/turn-status.test.ts"]
+paths = ["src/agent/session-entries.ts", "src/agent/side-session.ts", "src/agent/side-completion.ts", "src/btw/thread-store.ts", "src/btw/session.ts", "src/recap/generation.ts", "src/sprite/turn-status.ts", "src/sprite/live-status.ts", "tests/session-entries.test.ts", "tests/btw.test.ts", "tests/recap.test.ts", "tests/turn-status.test.ts"]
 read_before_editing = ["README.md"]
 validation_checks = ["focused-unit-test", "typecheck", "unit-tests", "fast-gate"]
 
