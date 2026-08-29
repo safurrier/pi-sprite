@@ -30,8 +30,10 @@ index:
 | Hand-edit `pet.json` | [Pet manifest reference](reference/pet-manifest.md) |
 | Debug terminal image behavior | [Rendering modes reference](reference/rendering-modes.md) |
 | Prepare an npm release | [Release checklist](reference/release.md) |
-| Generate a recap into the side thread | [Architecture](explanation/architecture.md) |
+| Generate a recap into the side thread | [Command Reference](reference/commands.md) |
 
 ## Understand the System
 
+- [Project Evolution](project-evolution.md) — historical phases and retained tradeoffs
+- [Command Reference](reference/commands.md) — slash-command lookup and transfer boundaries
 - [Architecture](explanation/architecture.md) — extension lifecycle, sprite runtime, side sessions, and package boundaries

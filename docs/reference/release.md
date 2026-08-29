@@ -61,7 +61,7 @@ The preferred path is the GitHub Actions npm publish workflow. It uses npm trust
 
 If trusted publishing isn't configured for the npm package yet, configure it in npm and rerun the GitHub Release workflow. Prefer fixing trusted publishing over a local publish.
 
-Manual publish is emergency-only. If used, first verify the release tag is on `origin/main`, preflight has passed from a clean checkout, and the npm account has the right package ownership. Then publish with provenance from a supported CI environment. Don't use a dirty local worktree as the normal fallback.
+Manual publish is emergency-only. If used, first verify the release tag is on the main branch at origin, preflight has passed from a clean checkout, and the npm account has the right package ownership. Then publish with provenance from a supported CI environment. Don't use a dirty local worktree as the normal fallback.
 
 ## Post-publish smoke
 

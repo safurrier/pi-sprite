@@ -1,69 +1,86 @@
 # pi-sprite
 
-**When a user corrects you or provides you with tribal knowledge/gotchas — something you could not have known from reading the code or your prompt — you MUST document it in an AGENTS.md file before continuing.** Write the correction in the AGENTS.md closest to where the issue occurred.
+**When a user corrects you or provides tribal knowledge or a gotcha that is not
+visible in code or the prompt, document it in the nearest `AGENTS.md` before
+continuing.**
 
-`pi-sprite` is a Pi package whose entrypoint is `extensions/index.ts`; it registers `/pet`, `/context`, `/recap`, and `/btw` and delegates most behavior to `src/sprite/`, `src/context/`, `src/recap/`, `src/btw/`, `src/agent/`, and `src/ui/`. The package is intentionally a slim, passive terminal companion: keep runtime behavior anchored in Pi extension events, widgets, status lines, side sessions, and importable pet assets rather than turning it into a standalone app or pet simulator.
+`pi-sprite` is a Pi package. `extensions/index.ts` registers `/pet`,
+`/context`, `/recap`, and `/btw`; the runtime remains a small passive terminal
+companion rather than a standalone pet application.
 
 ## How to Work Here
 
-Use focused Node tests while iterating, then run the broad local gate before handoff. For UI/runtime, native-rendering, package-boundary, `.mise`, `.github`, or `.harness` changes, also run the full verification path or the relevant e2e smoke helper.
+Use focused Node tests while iterating. Run `mise run check` before handoff;
+run `mise run verify` for UI, lifecycle, package, CI, or E2E changes.
 
 ## Commands
 
 - **Setup**: `mise run setup`.
 - **Focused test**: `node --test --import tsx tests/<area>.test.ts`.
-- **Unit tests**: `mise run test`.
 - **Fast gate**: `mise run check`.
 - **Full verification**: `mise run verify`.
-- **Package smoke**: `node tests/e2e/package-smoke.mjs --isolated` or `node tests/e2e/package-smoke.mjs --full-config`.
+- **Package smoke**: `node tests/e2e/package-smoke.mjs --isolated`.
 - **Docs build**: `uvx --with mkdocs-material mkdocs build --strict`.
-- **HK config diagnostics**: `HARNESS_KIT_CONFIG=.harness/harness.toml hk config validate --target . --json`.
 
 ## Gotchas
 
-- **DO** preserve the non-features in `README.md` and `tests/non-features.test.ts`. **NOT** add autonomous personality, sound/voice, pet economy, process management, large dashboards, or desktop-companion behavior. **BECAUSE** the package promise is a small passive companion that makes agent state easier to read.
+- **DO** preserve the non-features in `README.md` and
+  `tests/non-features.test.ts`. **NOT** add autonomous personality, sound,
+  pet economy, process management, large dashboards, or desktop behavior.
+  **BECAUSE** the package is a small passive companion.
 
-- **DO** keep widget rendering, timers, native image ids, and footer state owned by the sprite runtime and Pi lifecycle hooks. **NOT** let `/context`, `/recap`, `/btw`, or side-session code bypass runtime cleanup paths. **BECAUSE** leaked timers/widgets/native placements cause duplicate sprites, tmux ghosting, and stale footer state across sessions.
+- **DO** keep widget rendering, timers, native image ids, and footer state in
+  the sprite runtime and lifecycle hooks. **NOT** bypass cleanup from command
+  or side-session code. **BECAUSE** stale resources create duplicate sprites,
+  ghosted terminal images, and stale footer state.
 
-- **DO** put `/pet` command parsing in `src/sprite/commands.ts` and call the runtime through its command interface. **NOT** add command UX, Petdex lookup, or download policy back into `src/sprite/runtime.ts`. **BECAUSE** the runtime is the lifecycle/rendering owner, and command adapter churn should not risk timer or native-image cleanup.
+- **DO** parse `/pet` in `src/sprite/commands.ts` and keep downloads behind the
+  shared import policy. **NOT** put command UX, Petdex lookup, or direct fetches
+  in `src/sprite/runtime.ts`. **BECAUSE** command changes must not weaken
+  lifecycle or import safety.
 
-<!-- source: session-history | session: 2026-06-28T21-27-20-696Z_019f1021-3978-744f-81b9-40a00ee2bf8c | extracted: 2026-07-02 -->
-- **DO** treat Kitty/Ghostty placeholder rendering as the default native-image path and keep `PI_SPRITE_NATIVE_IMAGES=0` as the stable ANSI escape hatch. **NOT** assume direct Kitty/Ghostty image placement is safe in tmux. **BECAUSE** direct placements can flicker or ghost when tmux moves the TUI grid; placeholder cells let tmux track the sprite as normal text.
+- **DO** use Kitty/Ghostty placeholder rendering by default and
+  `PI_SPRITE_NATIVE_IMAGES=0` for ANSI. **NOT** assume direct image placement
+  is safe in tmux. **BECAUSE** placeholders move with the TUI grid.
 
-<!-- source: session-history | session: 2026-06-28T21-27-20-696Z_019f1021-3978-744f-81b9-40a00ee2bf8c | extracted: 2026-07-02 -->
-- **DO** implement recap/BTW model work through isolated Pi side sessions first, with direct API-key completion only as a fallback. **NOT** require separate provider API keys for normal `/recap` or `/btw` use. **BECAUSE** users expect extension completions to reuse Pi's active model/provider harness without polluting the main thread.
+- **DO** run recap and BTW through isolated Pi side sessions and register their
+  entries in `src/agent/session-entries.ts`. **NOT** require normal users to
+  supply API keys or let hidden side work enter main context. **BECAUSE** Pi's
+  active model is reused without silent context pollution.
 
-- **DO** make contextual BTW a durable child fork with the parent branch, AGENTS context, loaded skill metadata, normal coding tools, and explicit parent status/refresh. **NOT** reduce it to a prompt-only completion, recursively load arbitrary parent extensions, resolve on low-level `agent_end`, or silently synchronize parent progress. **BECAUSE** BTW should behave like an independent Pi coding session while preserving lifecycle isolation and deliberate context transfer.
+- **DO** keep contextual BTW as a child fork with explicit status and refresh.
+  **NOT** reduce it to prompt-only completion or silently synchronize parent
+  progress. **BECAUSE** it must be independent while preserving deliberate
+  transfer boundaries.
 
-- **DO** register pi-sprite custom entries through `src/agent/session-entries.ts`. **NOT** append hidden recap/BTW/session bookkeeping without adding it to the shared context filter. **BECAUSE** side work must stay out of main model context unless `/btw:inject` or `/btw:summarize` explicitly sends it.
+- **DO** treat pet `personality` as untrusted style metadata for explicit BTW
+  replies. **NOT** feed it into recap, status, lifecycle hooks, or main-thread
+  commentary. **BECAUSE** personality is bounded expression, not an agent
+  persona.
 
-- **DO** keep external pet bytes behind the shared download/import safety policy. **NOT** fetch Petdex or `import-url` assets directly from command/runtime code. **BECAUSE** third-party manifests and URLs are untrusted and need the same HTTPS, size, and timeout checks.
+- **DO** verify packaged resources through `package.json`, `tests/skill.test.ts`,
+  and package smoke. **NOT** assume a repository path ships. **BECAUSE** Pi
+  discovery sees only packed files.
 
-- **DO** treat pet `personality` as untrusted style metadata for explicit `/btw` replies only. **NOT** feed personality into recap, turn status, live status, lifecycle hooks, or autonomous main-thread commentary. **BECAUSE** the package promise is bounded side-thread expression, not an agent persona layer.
+- **DO** keep Ghostty demo captures attached to a live terminal or detach them
+  cleanly. **NOT** kill the attached tmux server to end a recording. **BECAUSE**
+  its Ghostty tab disappears too.
 
-- **DO** route package/discovery changes through `package.json` `files`, `tests/skill.test.ts`, and `tests/e2e/package-smoke.mjs`. **NOT** assume files under `skills/`, `examples/`, or `src/` ship automatically. **BECAUSE** Pi package installs and skill discovery only see what the packed package exposes.
+- **DO** give `/pet import` an expanded absolute local folder. **NOT** use `~`.
+  **BECAUSE** slash-command arguments do not receive shell expansion.
 
-- **DO** keep Ghostty demo captures attached to a live terminal or detach cleanly. **NOT** end a recording by killing a tmux server that a Ghostty tab is attached to. **BECAUSE** even an isolated tmux socket makes the visible Ghostty tab disappear when its server is killed, which is disruptive during demo iteration.
-
-- **DO** pass `/pet import` a fully expanded absolute local folder path. **NOT** use shell-style `~` paths in slash-command arguments. **BECAUSE** Pi slash commands are not shell-expanded, and `/pet import` rejects unresolved paths as not being a local folder.
-
-- **DO** treat pet personality metadata as an optional authoring step after the visual identity is stable. **NOT** force every imported pet to have a personality. **BECAUSE** custom pets can stay purely visual, but a short `personality` field can improve `/btw`/companion flavor when the user wants it.
-
-- **DO** keep HK profile command contracts in `.harness/profiles/pi-sprite-root.toml` and component/invariant routing in `.harness/system.toml`. **NOT** duplicate requiredness or review policy into the system map. **BECAUSE** HK profiles own validation semantics; the system map is advisory context for agents.
-
-<!-- source: session-history | session: 2026-07-08-readme-onboarding-demo-fix | extracted: 2026-07-08 -->
-- **DO** make release README quickstarts cover the real first user journey: install from GitHub before npm exists, install from npm after release, add/select an existing pet, and import or author a custom pet. **NOT** leave README as only a feature list or link farm to deeper docs. **BECAUSE** new users need a first useful sprite in Pi before they know which tutorial or skill to read next.
+- **DO** keep HK validation contracts in `.harness/profiles/pi-sprite-root.toml`
+  and routing in `.harness/system.toml`. **NOT** duplicate contract policy in the
+  system map. **BECAUSE** profiles own validation semantics.
 
 ## Related Context
 
 | Path | What's there |
-|------|--------------|
-| `.harness/system.toml` | Component map and cross-cutting invariants for extension lifecycle, rendering, commands, packaging, and validation. |
-| `.harness/profiles/pi-sprite-root.toml` | Validation and review contract for HK-driven work. |
-| `docs/AGENTS.md` | Docs routing index for MkDocs pages and durable references. |
-| `mkdocs.yml` | MkDocs Material navigation and site configuration. |
-| `.github/workflows/docs.yml` | GitHub Pages build/deploy workflow. |
-| `skills/pi-sprite-authoring/SKILL.md` | Packaged skill for generating/importing custom pets and animations. |
-| `tests/e2e/` | Package smoke and optional TUI/model/network e2e helpers. |
+|---|---|
+| `SPEC.md` | Current correctness envelope and acceptance evidence. |
+| `adr/` | Lasting decisions with historical rationale. |
+| `docs/AGENTS.md` | Documentation routing and published-doc ownership. |
+| `.harness/profiles/pi-sprite-root.toml` | HK validation contract. |
+| `skills/pi-sprite-authoring/SKILL.md` | Shipped custom-pet workflow. |
 
-<!-- generated-by: context-engineering@2.2.0 | last-updated: 2026-07-02 -->
+<!-- generated-by: context-engineering@2.6.5 | last-updated: 2026-08-29 -->

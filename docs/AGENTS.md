@@ -1,27 +1,33 @@
 # Docs Routing
 
-## Tutorials
-
-| Doc | Topic |
-|---|---|
-| [`tutorials/authoring-sprites.md`](tutorials/authoring-sprites.md) | Use `/pet create` or `/sprite create` to start guided custom pet authoring with stable state images and optional personality metadata |
-| [`tutorials/wendybot3000-demo.md`](tutorials/wendybot3000-demo.md) | Deterministic WendyBot3000 release-demo pet, Ghostty/VHS capture source, README GIF checks, and live Pi command sequence |
+`docs/` is the published MkDocs source. Keep current behavior in reference or
+architecture pages, historical rationale in project evolution, and user
+onboarding in the root README. Add every new published page to this file,
+`docs/README.md`, and `mkdocs.yml`.
 
 ## Explanation
 
 | Doc | Topic |
 |---|---|
-| [`explanation/architecture.md`](explanation/architecture.md) | Extension lifecycle, sprite runtime ownership, command bridges, side sessions, and package boundaries |
+| [`explanation/architecture.md`](explanation/architecture.md) | Lifecycle, runtime ownership, side sessions, and package boundary. |
+| [`project-evolution.md`](project-evolution.md) | Evidence-backed phases, supersession, and retained tradeoffs. |
 
 ## Reference
 
 | Doc | Topic |
 |---|---|
-| [`index.md`](index.md) | User and contributor landing page for the MkDocs site |
-| [`README.md`](README.md) | Human docs index ordered from quick start to deeper references |
-| [`reference/configuration.md`](reference/configuration.md) | Sprite home, pet folders, selected-pet state, environment overrides, and default-pet setup |
-| [`reference/pet-manifest.md`](reference/pet-manifest.md) | `pet.json` schema, supported sprite states, frame strips, and personality metadata |
-| [`reference/rendering-modes.md`](reference/rendering-modes.md) | Terminal rendering modes and when to use ANSI fallback or native placeholders |
-| [`reference/release.md`](reference/release.md) | npm release preflight, trusted publishing, and post-publish Pi smoke checks |
+| [`index.md`](index.md) | User and contributor landing page. |
+| [`reference/commands.md`](reference/commands.md) | Slash commands and main-thread boundaries. |
+| [`reference/configuration.md`](reference/configuration.md) | Sprite home, selected pet, and overrides. |
+| [`reference/pet-manifest.md`](reference/pet-manifest.md) | `pet.json`, states, strips, and personality. |
+| [`reference/rendering-modes.md`](reference/rendering-modes.md) | ANSI fallback and native placeholders. |
+| [`reference/release.md`](reference/release.md) | Release preflight and smoke checks. |
 
-<!-- generated-by: context-engineering@2.2.0 | last-updated: 2026-07-06 -->
+## Tutorials
+
+| Doc | Topic |
+|---|---|
+| [`tutorials/authoring-sprites.md`](tutorials/authoring-sprites.md) | Custom-pet authoring and import. |
+| [`tutorials/wendybot3000-demo.md`](tutorials/wendybot3000-demo.md) | Reproducible release-demo capture. |
+
+<!-- generated-by: context-engineering@2.6.5 | last-updated: 2026-08-29 -->
