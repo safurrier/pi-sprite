@@ -51,14 +51,7 @@ export default function piSpriteExtension(pi: ExtensionAPI) {
 	pi.events.on(PI_SPRITE_CONTROL_EVENT, (data: unknown) => {
 		const control = parsePiSpriteControl(data);
 		if (!control) return;
-		if (control.petId) {
-			try {
-				sprite.selectPet(control.petId);
-			} catch {
-				// Other extensions may request optional pets. Ignore missing local assets.
-			}
-		}
-		if (control.state) sprite.setState(control.state, { resetMs: control.resetMs });
+		sprite.setState(control.state, { resetMs: control.resetMs });
 	});
 
 	pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => {

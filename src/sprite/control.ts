@@ -1,11 +1,10 @@
-import { normalizePetId, SPRITE_STATES, type SpriteState } from "./manifest.ts";
+import { SPRITE_STATES, type SpriteState } from "./manifest.ts";
 
 export const PI_SPRITE_CONTROL_EVENT = "pi-sprite:control";
 
 export interface PiSpriteControl {
-	state?: SpriteState;
+	state: SpriteState;
 	resetMs?: number;
-	petId?: string;
 }
 
 /** Validate the deliberately small inter-extension control surface. */
@@ -17,10 +16,9 @@ export function parsePiSpriteControl(value: unknown): PiSpriteControl | undefine
 			? (input.state as SpriteState)
 			: undefined;
 	const resetMs =
-		typeof input.resetMs === "number" && Number.isFinite(input.resetMs) && input.resetMs >= 0 && input.resetMs <= 60_000
+		typeof input.resetMs === "number" && Number.isFinite(input.resetMs) && input.resetMs >= 1 && input.resetMs <= 60_000
 			? Math.floor(input.resetMs)
 			: undefined;
-	const petId = typeof input.petId === "string" ? normalizePetId(input.petId) : undefined;
-	if (!state && !petId) return undefined;
-	return { state, ...(resetMs === undefined ? {} : { resetMs }), ...(petId ? { petId } : {}) };
+	if (!state) return undefined;
+	return { state, ...(resetMs === undefined ? {} : { resetMs }) };
 }

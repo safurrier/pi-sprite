@@ -121,13 +121,12 @@ A cooperating Pi extension can drive the existing passive sprite runtime through
 
 ```ts
 pi.events.emit("pi-sprite:control", {
-  petId: "cap", // optional; ignored when the pet is not installed
   state: "working",
   resetMs: 1800,
 });
 ```
 
-Accepted states are `idle`, `thinking`, `working`, `success`, and `error`. `resetMs` is optional and bounded to 60 seconds. This changes presentation only; it does not inject model context or add autonomous companion behavior.
+Accepted states are `idle`, `thinking`, `working`, `success`, and `error`. `resetMs` is optional and bounded from 1 millisecond to 60 seconds. This changes transient presentation state only; it cannot select or persist a pet, inject model context, or add autonomous companion behavior. Users retain sole authority over persistent pet selection through `/pet choose`.
 
 ## Native image rendering
 
