@@ -3,6 +3,7 @@ import { registerPiSpriteContextFilter } from "../src/agent/session-entries.ts";
 import { registerBtwCommands } from "../src/btw/index.ts";
 import { registerContextCommand } from "../src/context/index.ts";
 import { registerRecapCommand } from "../src/recap/index.ts";
+import { PI_SPRITE_CONTROL_EVENT, parsePiSpriteControl } from "../src/sprite/control.ts";
 import { classifyLiveTurnStatus } from "../src/sprite/live-status.ts";
 import { createSpriteRuntime } from "../src/sprite/runtime.ts";
 import { classifyTurnStatus } from "../src/sprite/turn-status.ts";
@@ -46,6 +47,12 @@ export default function piSpriteExtension(pi: ExtensionAPI) {
 		if (run === turnStatusRun) sprite.setLiveStatus(status, liveGeneration);
 		if (run === turnStatusRun) scheduleLiveStatus(ctx, run);
 	}
+
+	pi.events.on(PI_SPRITE_CONTROL_EVENT, (data: unknown) => {
+		const control = parsePiSpriteControl(data);
+		if (!control) return;
+		sprite.setState(control.state, { resetMs: control.resetMs });
+	});
 
 	pi.on("session_start", async (_event: unknown, ctx: ExtensionContext) => {
 		await sprite.start(ctx);

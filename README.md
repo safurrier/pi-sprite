@@ -115,6 +115,19 @@ Pets live under:
 
 `turn-status` and `live-status` are both on by default. Turn status is final and replaces provisional live status when the agent turn ends. Live status waits five minutes into a long-running turn before showing a compact in-progress footer such as `🟣 running tests…`.
 
+### Inter-extension state control
+
+A cooperating Pi extension can drive the existing passive sprite runtime through Pi's shared event bus:
+
+```ts
+pi.events.emit("pi-sprite:control", {
+  state: "working",
+  resetMs: 1800,
+});
+```
+
+Accepted states are `idle`, `thinking`, `working`, `success`, and `error`. `resetMs` is optional and bounded from 1 millisecond to 60 seconds. This changes transient presentation state only; it cannot select or persist a pet, inject model context, or add autonomous companion behavior. Users retain sole authority over persistent pet selection through `/pet choose`.
+
 ## Native image rendering
 
 In Kitty/Ghostty-capable terminals, `pi-sprite` uses Kitty Unicode placeholders by default. Frames are uploaded quietly, while the visible sprite is rendered as placeholder text cells. That keeps tmux in charge of moving and clearing the pane grid, which avoids the ghosted native image placements caused by direct Kitty/Ghostty passthrough.
