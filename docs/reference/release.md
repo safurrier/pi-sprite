@@ -1,6 +1,6 @@
 ---
 id: release-checklist
-title: Release Checklist
+title: Release checklist
 description: >
   Checklist for publishing pi-sprite to npm and verifying Pi package installation.
 index:
@@ -9,9 +9,9 @@ index:
   - id: post-publish-smoke
 ---
 
-# Release Checklist
+# Release checklist
 
-Use this checklist after the release-prep PR has merged to `main`. The release step publishes the npm package; do not publish from a feature branch.
+Use this checklist after the release-prep PR has merged to `main`. The release step publishes the npm package. Don't publish from a feature branch.
 
 ## Preflight
 
@@ -37,7 +37,7 @@ Use this checklist after the release-prep PR has merged to `main`. The release s
    node tests/e2e/package-smoke.mjs --isolated
    ```
 
-4. Build the docs site so hosted README links are known-good:
+4. Build the docs site to verify hosted README links:
 
    ```bash
    uvx --with mkdocs-material mkdocs build --strict
@@ -45,22 +45,23 @@ Use this checklist after the release-prep PR has merged to `main`. The release s
 
 ## Publish
 
-The preferred path is the GitHub Actions npm publish workflow. It uses npm trusted publishing and runs when a GitHub Release is published with a tag matching the package version.
+The preferred path is the GitHub Actions npm publish workflow. It uses npm trusted publishing and runs when you publish a GitHub Release with a tag that matches the package version.
 
-1. Create and push the version tag:
+1. Read the package version, then create and push its matching tag:
 
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   version="$(node -p "require('./package.json').version")"
+   git tag "v${version}"
+   git push origin "v${version}"
    ```
 
-2. Draft a GitHub Release for `v1.0.0` and publish it.
+2. Draft and publish a GitHub Release for `v<package version>`.
 
 3. Confirm the `Publish npm package` workflow completes successfully.
 
-If trusted publishing is not configured for the npm package yet, configure it in npm and rerun the GitHub Release workflow. Prefer fixing trusted publishing over a local publish.
+If trusted publishing isn't configured for the npm package yet, configure it in npm and rerun the GitHub Release workflow. Prefer fixing trusted publishing over a local publish.
 
-Manual publish is emergency-only. If used, first verify the release tag is on `origin/main`, preflight has passed from a clean checkout, and the npm account has the right package ownership. Then publish with provenance from a supported CI environment; do not use a dirty local worktree as the normal fallback.
+Manual publish is emergency-only. If used, first verify the release tag is on the main branch at origin, preflight has passed from a clean checkout, and the npm account has the right package ownership. Then publish with provenance from a supported CI environment. Don't use a dirty local worktree as the normal fallback.
 
 ## Post-publish smoke
 

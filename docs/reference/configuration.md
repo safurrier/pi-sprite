@@ -51,7 +51,7 @@ A minimal seeded state file looks like this:
 }
 ```
 
-The selected id must match a folder under `pets/` whose `pet.json` parses successfully.
+The selected id must match a folder in the pets directory whose `pet.json` parses successfully.
 
 ## Default Pet Setup
 
@@ -89,4 +89,4 @@ Slash commands do not expand `~`, so avoid shell-style paths in `/pet import`.
 
 Some Pi wrappers set `PI_CODING_AGENT_DIR` to separate agent profiles. `pi-sprite` does not derive its home from that variable directly; it uses `PI_SPRITE_HOME` when present and otherwise falls back to `~/.pi/agent/pi-sprite`.
 
-For profile-specific defaults, set `PI_SPRITE_HOME` for each profile or mirror the seeded `pi-sprite/` directory into the profile-specific agent home used by that wrapper.
+For profile-specific defaults, set `PI_SPRITE_HOME` for each profile. Or mirror the seeded pi-sprite directory into that wrapper's profile-specific agent home.

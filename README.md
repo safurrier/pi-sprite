@@ -1,8 +1,8 @@
 # pi-sprite
 
-`pi-sprite` is a small Pi package that adds a terminal sprite, a context visualizer, a recap bubble, and a side-question thread to [Pi](https://pi.dev).
+`pi-sprite` is a small [Pi](https://pi.dev) package. It adds a terminal sprite, a context view, a recap bubble, and a side-question thread.
 
-It is intentionally not a pet simulator or desktop companion. The sprite is there to make agent state easier to read without adding another dashboard.
+It is not a pet simulator or desktop companion. The sprite makes agent state easier to read without adding a dashboard.
 
 ![pi-sprite WendyBot3000 demo](https://safurrier.github.io/pi-sprite/assets/wendybot3000-demo.gif)
 
@@ -42,7 +42,7 @@ Once Pi opens, get to a useful first sprite:
 /btw what should I look at next?
 ```
 
-`/pet install` selects the installed Petdex sprite automatically. If you already imported pets, use `/pet list` and `/pet choose <id>` instead.
+`/pet install` also selects the Petdex sprite. For an imported pet, use `/pet list`, then `/pet choose <id>`.
 
 If you already have a local pet folder, import it with an absolute path:
 
@@ -113,7 +113,7 @@ Pets live under:
 ~/.pi/agent/pi-sprite/pets/<id>/
 ```
 
-`turn-status` and `live-status` are both on by default. Turn status is final and replaces provisional live status when the agent turn ends. Live status waits five minutes into a long-running turn before showing a compact in-progress footer such as `🟣 running tests…`.
+Both status modes are on by default. Turn status is final. It replaces live status when a turn ends. Live status starts after five minutes and can show `🟣 running tests…`.
 
 ### Inter-extension state control
 
@@ -130,7 +130,7 @@ Accepted states are `idle`, `thinking`, `working`, `success`, and `error`. `rese
 
 ## Native image rendering
 
-In Kitty/Ghostty-capable terminals, `pi-sprite` uses Kitty Unicode placeholders by default. Frames are uploaded quietly, while the visible sprite is rendered as placeholder text cells. That keeps tmux in charge of moving and clearing the pane grid, which avoids the ghosted native image placements caused by direct Kitty/Ghostty passthrough.
+In Kitty and Ghostty, `pi-sprite` uses Kitty Unicode placeholders by default. It uploads frames quietly and draws the sprite as text cells. Tmux can then move and clear the pane grid. This avoids ghosted images from direct Kitty or Ghostty passthrough.
 
 For tmux, allow passthrough:
 
@@ -146,7 +146,7 @@ PI_SPRITE_NATIVE_IMAGES=0 pi
 
 ## Custom pets
 
-The simplest local pet has one image per state:
+A local pet can use one image for each state:
 
 ```text
 pet.json
@@ -173,7 +173,7 @@ Minimal `pet.json`:
 }
 ```
 
-Optional `personality` text gives the selected pet a bounded voice in explicit `/btw` side conversations:
+Optional `personality` text gives the selected pet a bounded voice for explicit `/btw` side conversations:
 
 ```json
 {
@@ -186,7 +186,7 @@ Optional `personality` text gives the selected pet a bounded voice in explicit `
 }
 ```
 
-The personality is not injected into normal main-agent turns. It only guides `/btw` and `/btw:ask` answers.
+Pi does not inject personality into normal turns. It only guides `/btw` and `/btw:ask` answers.
 
 Import and select a local pet folder:
 
@@ -194,11 +194,11 @@ Import and select a local pet folder:
 /pet import /path/to/pet-folder
 ```
 
-Codex/Petdex `pet.json + spritesheet.webp` compatibility is also supported. `pi-sprite` cycles multi-frame spritesheets and infers standard Petdex 8x9 atlases for `spritesheet.*`.
+`pi-sprite` also supports Codex and Petdex `pet.json + spritesheet.webp` pets. It cycles multi-frame sheets and infers standard Petdex 8x9 atlases for `spritesheet.*`.
 
 ### Author a sprite effectively
 
-This package ships the `pi-sprite-authoring` skill. Use it when you want an agent to turn references, generated art, or hand-drawn frames into an importable pet without losing character consistency across states.
+This package ships the `pi-sprite-authoring` skill. It helps an agent turn references, generated art, or hand-drawn frames into an importable pet with consistent states.
 
 Start the guided flow from Pi:
 
@@ -239,7 +239,7 @@ node skills/pi-sprite-authoring/scripts/create-pet-template.mjs \
   --out /tmp/desk-cat-sprite
 ```
 
-Third-party reference sprites should stay local unless their licenses are verified. This helper downloads Petdex examples into a gitignored folder with provenance notes:
+Keep third-party reference sprites local until you verify their licenses. This helper downloads Petdex examples to a gitignored folder with provenance notes:
 
 ```bash
 node skills/pi-sprite-authoring/scripts/download-petdex-examples.mjs --limit 12 --out /tmp/petdex-downloads
@@ -255,7 +255,7 @@ For the full workflow, read the hosted [Sprite Authoring Guide](https://safurrie
 /sprite:context
 ```
 
-`/context` opens a TUI overlay with the active model, context window, token total, estimated category breakdown, and remaining free space. `/sprite:context` is the package-specific alias for setups that already have another `/context` command.
+`/context` opens a terminal overlay. It shows the active model, context window, token total, estimated categories, and free space. `/sprite:context` is the package alias when another package owns `/context`.
 
 ## `/recap`
 
@@ -272,7 +272,7 @@ Current status: ...
 Next: ...
 ```
 
-Recap generation first uses an isolated, no-tools Pi side session with the current model, so it does not add messages to the main thread. Direct API-key completion is only a fallback. Use arrow keys, `j/k`, `space/d`, or `u` to scroll longer recaps.
+Recap first uses an isolated, no-tools Pi side session with the current model. It does not add messages to the main thread. Direct API-key completion is only a fallback. Use arrow keys, `j/k`, `space/d`, or `u` to scroll longer recaps.
 
 ## `/btw`
 
@@ -290,21 +290,26 @@ Recap generation first uses an isolated, no-tools Pi side session with the curre
 /btw:summarize
 ```
 
-`/btw` is a continuing side conversation outside the main thread. On its first contextual question, it creates a persistent child Pi SDK session whose active model context follows the exact parent path selected at the current leaf. The persistent child file may retain sibling history copied from the parent session, but that sibling history is not part of the active model context. The child inherits the active model/provider, thinking level, cwd, AGENTS context, loaded skill metadata, and normal `read`, `bash`, `edit`, and `write` tools without recursively loading arbitrary parent extensions. Follow-ups continue in that isolated transcript; `/btw:ask` remains contextless and disposable. Use `/btw:recap` or `/btw recap` to generate the normal session recap inside the BTW thread.
+`/btw` is a continuing side conversation outside the main thread. Its first contextual question creates a persistent child Pi SDK session. The model follows the selected parent path at the current leaf. The child file can retain copied sibling history, but that history is not in the active model context.
 
-Parent progress is not synchronized automatically. `/btw:status` shows the parent, fork point, last refresh, and child identity without changing either conversation. `/btw:refresh` explicitly appends a bounded, read-only snapshot of parent progress to the child context. The speech bubble streams thinking, tool activity, and assistant text and waits for Pi's full prompt lifecycle, including tool turns and retries, before accepting the answer.
+The child inherits the model and provider, thinking level, cwd, AGENTS context, skill metadata, and normal `read`, `bash`, `edit`, and `write` tools. It does not recursively load arbitrary parent extensions. Follow-ups stay in this transcript. `/btw:ask` is contextless and disposable. Use `/btw:recap` or `/btw recap` for a session recap in the BTW thread.
 
-Both agents share the cwd: a BTW file mutation can race a main-agent mutation, so BTW is instructed to mutate only on an explicit request and to say what it changed. Nothing is injected back into the main conversation unless you explicitly run `/btw:inject` or `/btw:summarize`. `/btw:new`, `/btw:clear`, branch/session changes, and shutdown cancel/dispose the child runtime; visible BTW entries can still be restored from hidden parent-session entries. This design adopts the persistent side-session and branch-seeding approach from [dbachelder/pi-btw](https://github.com/dbachelder/pi-btw).
+Pi does not sync parent progress automatically. `/btw:status` shows the parent, fork point, last refresh, and child identity. It changes neither conversation. `/btw:refresh` adds a bounded, read-only parent snapshot to the child. The speech bubble streams thinking, tools, and text. It waits for Pi's full prompt lifecycle, including tools and retries, before accepting an answer.
+
+Both agents share the cwd. A BTW file edit can race a main-agent edit. BTW changes files only on an explicit request and reports the change. Nothing returns to the main conversation until you run `/btw:inject` or `/btw:summarize`. `/btw:new`, `/btw:clear`, branch or session changes, and shutdown cancel or dispose of the child runtime. Pi can restore visible BTW entries from hidden parent-session entries. The design uses the persistent side-session and branch-seeding approach from [dbachelder/pi-btw](https://github.com/dbachelder/pi-btw).
 
 ## Documentation
 
-Start with the hosted docs; these links work from GitHub, npm, and installed package readers:
+Start with the hosted docs. These links work on GitHub, npm, and installed package readers:
+
+- [Command Reference](https://safurrier.github.io/pi-sprite/reference/commands/) for slash-command lookup and side-thread boundaries
+- [Project Evolution](https://safurrier.github.io/pi-sprite/project-evolution/) for durable architectural decisions
 
 - [Docs home](https://safurrier.github.io/pi-sprite/) for the user and contributor index
 - [Sprite Authoring Guide](https://safurrier.github.io/pi-sprite/tutorials/authoring-sprites/) for custom pet authoring
 - [Configuration Reference](https://safurrier.github.io/pi-sprite/reference/configuration/) for default pet state and sprite home setup
 
-From a source checkout, durable docs live under `docs/` and are published with MkDocs Material through GitHub Pages. Build them locally with:
+Source docs live in `docs/`. MkDocs Material publishes them through GitHub Pages. Build them locally with:
 
 ```bash
 uvx --with mkdocs-material mkdocs build --strict

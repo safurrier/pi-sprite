@@ -57,7 +57,9 @@ nav:
       - WendyBot3000 Demo: tutorials/wendybot3000-demo.md
   - Explanation:
       - Architecture: explanation/architecture.md
+      - Project Evolution: project-evolution.md
   - Reference:
+      - Commands: reference/commands.md
       - Configuration: reference/configuration.md
       - Pet Manifest: reference/pet-manifest.md
       - Rendering Modes: reference/rendering-modes.md
