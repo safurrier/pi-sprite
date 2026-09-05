@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Updated Sharp to 0.34.5 so pi-sprite can share a compatible libvips runtime with other Pi image extensions instead of triggering duplicate native-class warnings on macOS.
+
 ## 1.1.0 - 2026-07-29
 
 - Changed contextual `/btw` into a persistent child session whose active model context follows the exact parent path, with inherited AGENTS and skill context, normal coding tools, and full prompt-lifecycle completion. The persistent child file may retain sibling history outside that active context.
